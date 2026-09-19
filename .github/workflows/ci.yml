@@ -102,6 +102,6 @@ jobs:
         with:
           name: next-build
           path: |
-            .next/
-            !.next/cache
+            .next/**
+            !.next/cache/**
           retention-days: 3
