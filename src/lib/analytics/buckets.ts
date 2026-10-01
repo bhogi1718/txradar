@@ -1,4 +1,4 @@
-import type { Transaction } from "@/lib/schemas/transaction";
+import { isNative, type Transaction } from "@/lib/schemas/transaction";
 
 export type Granularity = "hour" | "day" | "week" | "month";
 
@@ -66,14 +66,15 @@ function nextBucket(start: number, g: Granularity): number {
  * Group transactions into contiguous time buckets — empty buckets included
  * so gaps in activity are visible as gaps in the chart.
  *
- * `range` defaults to the span of the data. Failed txs are ignored (no
+ * `range` defaults to the span of the data. Only native-coin transfers are
+ * plotted (token amounts are in other units). Failed txs are ignored (no
  * value moved); self-transfers count toward `count` but neither flow.
  */
 export function bucketize(
   txs: readonly Transaction[],
   options: { granularity?: Granularity; range?: { from: number; to: number } } = {},
 ): { granularity: Granularity; buckets: FlowBucket[] } {
-  const live = txs.filter((t) => t.status !== "failed");
+  const live = txs.filter((t) => t.status !== "failed" && isNative(t));
   if (live.length === 0 && !options.range) {
     return { granularity: options.granularity ?? "day", buckets: [] };
   }

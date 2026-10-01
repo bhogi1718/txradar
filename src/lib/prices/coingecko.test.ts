@@ -73,3 +73,54 @@ describe("coingecko client", () => {
     });
   });
 });
+
+describe("coingecko history and token prices", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("collapses market_chart points to one per UTC day", async () => {
+    const day = Date.UTC(2026, 8, 30);
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        prices: [
+          [day - 86_400_000, 90],
+          [day, 100],
+          [day + 3_600_000 * 5, 105], // intraday "now" point replaces the midnight close
+        ],
+      }),
+    );
+    const series = await createCoinGeckoClient(undefined).fetchDailyHistory("ethereum");
+    const url = new URL(String(fetchMock.mock.calls[0]![0]));
+    expect(url.pathname).toBe("/api/v3/coins/ethereum/market_chart");
+    expect(url.searchParams.get("days")).toBe("365");
+    expect(series).toEqual([
+      [day - 86_400_000, 90],
+      [day, 105],
+    ]);
+  });
+
+  it("returns token prices keyed by the contracts asked for", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": { usd: 1.0001 } }),
+    );
+    const prices = await createCoinGeckoClient(undefined).fetchTokenPrices("ethereum", [
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "0x0000000000000000000000000000000000000001",
+    ]);
+    expect(new URL(String(fetchMock.mock.calls[0]![0])).pathname).toBe(
+      "/api/v3/simple/token_price/ethereum",
+    );
+    expect(prices).toEqual({ "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": 1.0001 });
+  });
+
+  it("skips the request entirely for no contracts", async () => {
+    await expect(
+      createCoinGeckoClient(undefined).fetchTokenPrices("tron", []),
+    ).resolves.toEqual({});
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

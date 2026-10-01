@@ -5,6 +5,8 @@ import Link from "next/link";
 
 import { ChainBadge } from "@/components/common/chain-badge";
 import { CopyButton } from "@/components/common/copy-button";
+import { EntityTag } from "@/components/common/entity-tag";
+import { getLabel } from "@/lib/labels";
 import { formatRelative } from "@/lib/format";
 import { CHAIN_META, type Chain } from "@/lib/schemas/chain";
 import { cn } from "@/lib/utils";
@@ -25,6 +27,7 @@ export function WalletHeader({
   refreshing?: boolean;
 }) {
   const meta = CHAIN_META[chain];
+  const label = getLabel(chain, address);
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -37,7 +40,11 @@ export function WalletHeader({
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           <ChainBadge chain={chain} showSymbol />
-          <span className="text-xs text-muted-foreground">Wallet</span>
+          {label ? (
+            <EntityTag label={label} showKind />
+          ) : (
+            <span className="text-xs text-muted-foreground">Wallet</span>
+          )}
         </div>
         <div className="mt-2 flex items-center gap-1.5">
           <h1 className="min-w-0 mono-data text-lg font-medium break-all sm:text-xl">

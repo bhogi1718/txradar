@@ -2,6 +2,7 @@ import { ArrowDownLeft, ArrowUpRight, Flame, Scale } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { WalletSummary } from "@/lib/analytics/summary";
+import type { UsdSummary } from "@/lib/analytics/valuation";
 import { formatAmount, formatCount, formatDate, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -52,15 +53,21 @@ function Tile({
 export function SummaryStrip({
   summary,
   symbol,
-  price,
+  usd,
 }: {
   summary: WalletSummary;
   symbol: string;
-  /** Current USD price; values are shown at today's price, labeled as such. */
-  price: number | undefined;
+  /** Native flows in USD, each at its own transfer-day price where available. */
+  usd: UsdSummary | null;
 }) {
-  const usd = (v: number, signed = false) =>
-    price !== undefined ? formatUsd(v * price, { signed, compact: true }) : null;
+  const priced = usd !== null && usd.basis !== null;
+  const fmt = (v: number, signed = false) => formatUsd(v, { signed, compact: true });
+  const basisText =
+    usd?.basis === "historical"
+      ? "at time of transfer"
+      : usd?.basis === "current"
+        ? "at today's price"
+        : "at transfer-day prices*";
 
   const netTone = summary.net > 0 ? "in" : summary.net < 0 ? "out" : "neutral";
 
@@ -84,9 +91,19 @@ export function SummaryStrip({
           </span>
         }
         sub={
-          usd(summary.net, true)
-            ? `≈ ${usd(summary.net, true)} at today's price`
-            : "Received − sent − fees"
+          priced ? (
+            <span
+              title={
+                usd.basis === "mixed"
+                  ? "Transfers older than a year are valued at today's price"
+                  : undefined
+              }
+            >
+              ≈ {fmt(usd.net, true)} {basisText}
+            </span>
+          ) : (
+            "Received − sent − fees"
+          )
         }
       />
       <Tile
@@ -102,7 +119,7 @@ export function SummaryStrip({
         sub={
           <>
             {formatCount(summary.counts.in)} inbound
-            {usd(summary.inflow) && <> · ≈ {usd(summary.inflow)}</>}
+            {priced && <> · ≈ {fmt(usd.inflow)}</>}
           </>
         }
       />
@@ -119,7 +136,7 @@ export function SummaryStrip({
         sub={
           <>
             {formatCount(summary.counts.out)} outbound
-            {usd(summary.outflow) && <> · ≈ {usd(summary.outflow)}</>}
+            {priced && <> · ≈ {fmt(usd.outflow)}</>}
           </>
         }
       />
@@ -133,9 +150,16 @@ export function SummaryStrip({
           </span>
         }
         sub={
-          summary.firstSeen !== null && summary.lastSeen !== null
-            ? `${formatCount(summary.counterparties)} counterparties · ${formatDate(summary.firstSeen)} – ${formatDate(summary.lastSeen)}`
-            : `${formatCount(summary.counterparties)} counterparties`
+          <>
+            {usd && usd.fees > 0 && <>≈ {fmt(usd.fees)} · </>}
+            {formatCount(summary.counterparties)} counterparties
+            {summary.firstSeen !== null && summary.lastSeen !== null && (
+              <span className="hidden xl:inline">
+                {" "}
+                · {formatDate(summary.firstSeen)} – {formatDate(summary.lastSeen)}
+              </span>
+            )}
+          </>
         }
       />
     </div>

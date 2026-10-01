@@ -12,6 +12,7 @@ export function makeTx(overrides: Partial<Transaction> = {}): Transaction {
     blockHeight: 1000 + seq,
     from: "0xsender",
     to: "0xwallet",
+    asset: { symbol: "ETH", contract: null, decimals: 18 },
     value: 1,
     fee: null,
     direction: "in",

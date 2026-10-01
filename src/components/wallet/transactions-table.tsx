@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ChevronUp,
   CircleAlert,
+  TriangleAlert,
   Clock,
   ExternalLink,
   Repeat,
@@ -25,18 +26,27 @@ import {
 import { useMemo, type ReactNode } from "react";
 
 import { Address } from "@/components/common/address";
+import { EntityTag } from "@/components/common/entity-tag";
 import { Segmented } from "@/components/common/segmented";
 import { counterpartyOf } from "@/lib/analytics/summary";
+import { valueTx, type PricingContext } from "@/lib/analytics/valuation";
 import { truncateAddress } from "@/lib/chains/address";
 import {
   formatAmount,
   formatCount,
+  formatDate,
   formatDateTime,
   formatRelative,
   formatUsd,
 } from "@/lib/format";
+import { getLabel } from "@/lib/labels";
 import { CHAIN_META, type Chain } from "@/lib/schemas/chain";
-import type { Direction, Transaction, TxCategory } from "@/lib/schemas/transaction";
+import {
+  isNative,
+  type Direction,
+  type Transaction,
+  type TxCategory,
+} from "@/lib/schemas/transaction";
 import { cn } from "@/lib/utils";
 
 const features = tableFeatures({
@@ -129,7 +139,7 @@ function StatusMark({ status }: { status: Transaction["status"] }) {
   return null;
 }
 
-function buildColumns(chain: Chain, price: number | undefined) {
+function buildColumns(chain: Chain, pricing: PricingContext) {
   const { symbol, explorer } = CHAIN_META[chain];
 
   return helper.columns([
@@ -164,7 +174,13 @@ function buildColumns(chain: Chain, price: number | undefined) {
         if (tx.direction === "self") {
           return <span className="text-xs text-muted-foreground">Own wallet</span>;
         }
-        return <Address value={info.getValue()} />;
+        const label = getLabel(tx.chain, info.getValue());
+        return (
+          <div className="flex items-center gap-1.5">
+            {label && <EntityTag label={label} />}
+            <Address value={info.getValue()} head={label ? 4 : 6} />
+          </div>
+        );
       },
     }),
     helper.accessor("category", {
@@ -178,57 +194,91 @@ function buildColumns(chain: Chain, price: number | undefined) {
             <span className="text-[13px] text-muted-foreground">
               {CATEGORY_LABEL[tx.category]}
             </span>
-            {tx.method && tx.method !== "TriggerSmartContract" && (
-              <span className="max-w-32 truncate rounded bg-muted px-1.5 py-0.5 mono-data text-[11px]">
-                {tx.method}
-              </span>
-            )}
+            {tx.method &&
+              tx.method !== "TriggerSmartContract" &&
+              tx.category !== "token-transfer" && (
+                <span className="max-w-32 truncate rounded bg-muted px-1.5 py-0.5 mono-data text-[11px]">
+                  {tx.method}
+                </span>
+              )}
           </div>
         );
       },
     }),
     helper.accessor((tx) => signed(tx), {
       id: "amount",
-      header: `Amount (${symbol})`,
+      header: "Amount",
       sortDescFirst: true,
       cell: (info) => {
         const tx = info.row.original;
         const v = info.getValue();
         const failed = tx.status === "failed";
+        const token = !isNative(tx);
+        const unverified =
+          token &&
+          pricing.tokens !== undefined &&
+          pricing.tokens[tx.asset.contract!] === undefined;
         return (
-          <span
-            className={cn(
-              "mono-data text-[13px] font-medium",
-              failed && "text-muted-foreground line-through",
-              !failed && v > 0 && "text-inflow",
-              !failed && v < 0 && "text-outflow",
-            )}
-          >
-            {tx.direction === "self"
-              ? formatAmount(tx.value)
-              : formatAmount(failed ? tx.value : v, { signed: true })}
+          <span className="inline-flex items-baseline gap-1.5">
+            <span
+              className={cn(
+                "mono-data text-[13px] font-medium",
+                failed && "text-muted-foreground line-through",
+                !failed && v > 0 && "text-inflow",
+                !failed && v < 0 && "text-outflow",
+              )}
+            >
+              {tx.direction === "self"
+                ? formatAmount(tx.value)
+                : formatAmount(failed ? tx.value : v, { signed: true })}
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-0.5 text-[11px]",
+                token && !unverified
+                  ? "font-medium text-foreground/80"
+                  : "text-muted-foreground",
+              )}
+              title={
+                unverified
+                  ? `${tx.asset.contract} — no market price; possibly a spam token`
+                  : (tx.asset.contract ?? undefined)
+              }
+            >
+              {unverified && <TriangleAlert className="size-3 text-destructive" />}
+              {tx.asset.symbol}
+            </span>
           </span>
         );
       },
     }),
     helper.display({
       id: "usd",
-      header: "USD now",
+      header: "Value (USD)",
       cell: (info) => {
-        const v = Math.abs(signed(info.row.original));
-        if (price === undefined || v === 0) {
-          return <span className="text-muted-foreground/60">—</span>;
-        }
+        const tx = info.row.original;
+        const v = Math.abs(signed(tx)) > 0 ? valueTx(tx, pricing) : null;
+        if (!v) return <span className="text-muted-foreground/60">—</span>;
         return (
-          <span className="mono-data text-[13px] text-muted-foreground">
-            {formatUsd(v * price)}
+          <span
+            className="mono-data text-[13px] text-muted-foreground"
+            title={
+              v.basis === "historical"
+                ? `At the ${formatDate(tx.timestamp)} price`
+                : "At today's price"
+            }
+          >
+            {formatUsd(v.usd)}
+            {v.basis === "current" && (
+              <span className="ml-0.5 text-[10px] opacity-60">*</span>
+            )}
           </span>
         );
       },
     }),
     helper.accessor("fee", {
       id: "fee",
-      header: "Fee",
+      header: `Fee (${symbol})`,
       enableSorting: false,
       cell: (info) => {
         const fee = info.getValue();
@@ -266,24 +316,25 @@ function buildColumns(chain: Chain, price: number | undefined) {
 export function TransactionsTable({
   data,
   chain,
-  price,
+  pricing,
   toolbar,
   empty,
 }: {
   data: Transaction[];
   chain: Chain;
-  price: number | undefined;
+  pricing: PricingContext;
   toolbar?: ReactNode;
   /** Rendered in place of rows when `data` is empty. */
   empty?: ReactNode;
 }) {
-  const columns = useMemo(() => buildColumns(chain, price), [chain, price]);
+  const columns = useMemo(() => buildColumns(chain, pricing), [chain, pricing]);
 
   const table = useTable({
     features,
     columns,
     data,
-    getRowId: (row) => row.hash,
+    // One tx can carry several token transfers, so the hash alone isn't unique.
+    getRowId: (row, index) => `${row.hash}:${row.asset.contract ?? "native"}:${index}`,
     autoResetPageIndex: true,
     enableSortingRemoval: false,
     initialState: {
@@ -298,7 +349,10 @@ export function TransactionsTable({
   const lastRow = Math.min(total, (pageIndex + 1) * pageSize);
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border/70 bg-card/70 backdrop-blur">
+    <section
+      id="transactions"
+      className="scroll-mt-20 overflow-hidden rounded-xl border border-border/70 bg-card/70 backdrop-blur"
+    >
       {toolbar && <div className="border-b border-border/70 p-3 sm:p-4">{toolbar}</div>}
 
       {data.length === 0 ? (

@@ -22,6 +22,7 @@ const sample: Transaction = {
   blockHeight: 1,
   from: "0x1",
   to: ETH.toLowerCase(),
+  asset: { symbol: "ETH", contract: null, decimals: 18 },
   value: 1,
   fee: null,
   direction: "in",
