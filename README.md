@@ -62,13 +62,19 @@ automatically.
 src/
   app/
     api/            # Route handlers: /api/transactions, /api/prices, /api/health
-    ...             # Pages, layout, design tokens (globals.css)
+    [chain]/[address]/  # Wallet page
+    ...             # Home, layout, 404, error boundary, design tokens (globals.css)
   components/
     brand/          # RadarMark and other brand elements
-    layout/         # Site header/shell
+    common/         # Segmented control, chain badge, address, radar scope
+    layout/         # Site header/footer
+    search/         # Wallet search with chain auto-detect
+    wallet/         # Summary, flow chart, transactions table, states
     ui/             # shadcn/ui primitives
+  hooks/            # useTransactions, usePrices, URL-backed filters, recent searches
   lib/
-    api/            # Shared request/response contracts + envelope helpers
+    analytics/      # Summary, time bucketing, filters (pure, tested)
+    api/            # Shared contracts, envelope helpers, browser client
     chains/         # Per-chain adapters (bitcoin.ts, ethereum.ts, tron.ts),
                      # address validation, unit conversion, HTTP + error helpers
     prices/         # CoinGecko client
@@ -85,7 +91,8 @@ Built in phases; see the project plan for the full roadmap. Done so far:
 - ✅ Phase 1 — Chain adapters (normalized `Transaction` model, address validation,
   fixture-backed tests)
 - ✅ Phase 2 — API routes (validated, cached, uniform error envelope)
-- ⬜ Phase 3 — Core UI (tracking form, results table, summary cards)
+- ✅ Phase 3 — Core UI (chain auto-detecting search, wallet page with summary, flow
+  timeline, filterable/sortable table; filters in the URL)
 - ⬜ Phase 4 — Enrichment (USD values, exchange labels, TRC-20 support)
 - ⬜ Phase 5 — Drill-down, counterparty grouping, CSV export
 - ⬜ Phase 6 — Hardening (pagination, error boundaries, e2e tests)

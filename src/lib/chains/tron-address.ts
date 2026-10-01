@@ -1,9 +1,12 @@
-import { createHash } from "node:crypto";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 /**
  * Tron addresses are Base58Check-encoded 21-byte payloads: 0x41 prefix
  * followed by the 20-byte account id. TronGrid returns the hex form in
  * `raw_data`, so we need both directions.
+ *
+ * Isomorphic on purpose (no node:crypto, no Buffer): the search form runs
+ * the same checksum validation in the browser that the API runs on the server.
  */
 
 const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -13,16 +16,24 @@ const TRON_PREFIX = 0x41;
 const PAYLOAD_LENGTH = 21;
 const CHECKSUM_LENGTH = 4;
 
-function sha256(bytes: Uint8Array): Uint8Array {
-  return new Uint8Array(createHash("sha256").update(bytes).digest());
-}
-
 function checksum(payload: Uint8Array): Uint8Array {
   return sha256(sha256(payload)).subarray(0, CHECKSUM_LENGTH);
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function base58Encode(bytes: Uint8Array): string {
@@ -69,7 +80,7 @@ export function tronHexToBase58(hex: string): string {
   if (!/^[0-9a-fA-F]{42}$/.test(clean) || !clean.toLowerCase().startsWith("41")) {
     throw new TypeError(`Not a Tron hex address: ${hex}`);
   }
-  const payload = Uint8Array.from(Buffer.from(clean, "hex"));
+  const payload = hexToBytes(clean);
   const full = new Uint8Array(PAYLOAD_LENGTH + CHECKSUM_LENGTH);
   full.set(payload);
   full.set(checksum(payload), PAYLOAD_LENGTH);
@@ -86,7 +97,7 @@ export function tronBase58ToHex(address: string): string | null {
   const given = bytes.subarray(PAYLOAD_LENGTH);
   if (!bytesEqual(checksum(payload), given)) return null;
 
-  return Buffer.from(payload).toString("hex");
+  return bytesToHex(payload);
 }
 
 /** True only when the string is a well-formed, checksum-valid Tron address. */
