@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CHAIN_META } from "@/lib/schemas/chain";
+import { CHAIN_META, nativeAsset } from "@/lib/schemas/chain";
 import { transactionListSchema, type Transaction } from "@/lib/schemas/transaction";
 
 import {
@@ -65,6 +65,30 @@ const tronGridResponseSchema = z.object({
 
 type TronGridTx = z.infer<typeof tronGridTxSchema>;
 
+/** /v1/accounts/{addr}/transactions/trc20 — one row per token Transfer event. */
+const trc20TransferSchema = z.object({
+  transaction_id: z.string(),
+  token_info: z.object({
+    symbol: z.string(),
+    address: z.string(),
+    decimals: z.number().int().nonnegative(),
+    name: z.string().optional(),
+  }),
+  block_timestamp: z.number().int().nonnegative(),
+  from: z.string(),
+  to: z.string(),
+  type: z.string(),
+  /** Base-unit integer as a string. */
+  value: z.string().regex(/^\d+$/),
+});
+
+const trc20ResponseSchema = z.object({
+  data: z.array(trc20TransferSchema),
+  success: z.boolean(),
+});
+
+type Trc20Transfer = z.infer<typeof trc20TransferSchema>;
+
 // --- Normalization --------------------------------------------------------
 
 function toBase58(hex: string | undefined): string | null {
@@ -88,6 +112,8 @@ export function normalizeTronGridTx(tx: TronGridTx, wallet: string): Transaction
   let to: string | null;
   let category: Transaction["category"];
   let valueSun: number;
+  let asset: Transaction["asset"] = nativeAsset("tron");
+  let assetDecimals = decimals;
 
   switch (contract.type) {
     case "TransferContract":
@@ -106,10 +132,18 @@ export function normalizeTronGridTx(tx: TronGridTx, wallet: string): Transaction
       valueSun = v.call_value ?? 0;
       break;
     case "TransferAssetContract":
-      // TRC-10 token: `amount` is in token units, not TRX. Native value is 0.
+      // TRC-10 token, identified by a numeric id. TronGrid doesn't return its
+      // precision, so the amount stays in raw units (decimals 0) and the
+      // asset is never priced — the UI marks it unverified.
       to = toBase58(v.to_address);
       category = "token-transfer";
-      valueSun = 0;
+      valueSun = v.amount ?? 0;
+      asset = {
+        symbol: `TRC-10 #${v.asset_name ?? "?"}`,
+        contract: `trc10:${v.asset_name ?? "unknown"}`,
+        decimals: 0,
+      };
+      assetDecimals = 0;
       break;
     default:
       // Staking, votes, resource delegation, etc. Surface it, value 0.
@@ -129,7 +163,8 @@ export function normalizeTronGridTx(tx: TronGridTx, wallet: string): Transaction
     blockHeight: tx.blockNumber ?? null,
     from,
     to,
-    value: failed ? 0 : fromBaseUnits(valueSun, decimals),
+    asset,
+    value: failed ? 0 : fromBaseUnits(valueSun, assetDecimals),
     fee: isOut && ret?.fee !== undefined ? fromBaseUnits(ret.fee, decimals) : null,
     direction: isOut && isIn ? "self" : isOut ? "out" : "in",
     status: failed ? "failed" : "success",
@@ -137,6 +172,61 @@ export function normalizeTronGridTx(tx: TronGridTx, wallet: string): Transaction
     isContract: category === "contract-call" || category === "contract-creation",
     method: contract.type === "TriggerSmartContract" ? "TriggerSmartContract" : null,
   };
+}
+
+/**
+ * A TRC-20 Transfer as a token transaction. Fee and block are unknown here;
+ * `mergeTokenTransfers` fills them in from the matching native row when the
+ * wallet itself sent it (the only case where the wallet paid the fee).
+ */
+export function normalizeTrc20Transfer(t: Trc20Transfer, wallet: string): Transaction {
+  const isOut = t.from === wallet;
+  const isIn = t.to === wallet;
+  const symbol = t.token_info.symbol.trim() || t.token_info.name?.trim() || "TOKEN";
+  return {
+    chain: "tron",
+    hash: t.transaction_id,
+    timestamp: t.block_timestamp,
+    blockHeight: null,
+    from: t.from,
+    to: t.to,
+    asset: { symbol, contract: t.token_info.address, decimals: t.token_info.decimals },
+    value: fromBaseUnits(t.value, t.token_info.decimals),
+    fee: null,
+    direction: isOut && isIn ? "self" : isOut ? "out" : "in",
+    status: "success", // TronGrid only emits Transfer events for successful calls
+    category: "token-transfer",
+    isContract: false,
+    method: "transfer",
+  };
+}
+
+/**
+ * Sending a token is a TriggerSmartContract call to the token contract: the
+ * native list shows it as a value-0 contract call, the TRC-20 list shows the
+ * real amount. Collapse each pair into one token row that keeps the native
+ * row's fee and block height, so the table shows the transfer once.
+ */
+export function mergeTokenTransfers(
+  native: readonly Transaction[],
+  tokens: readonly Transaction[],
+): Transaction[] {
+  const byHash = new Map(native.map((tx) => [tx.hash, tx]));
+  const absorbed = new Set<string>();
+
+  const enriched = tokens.map((token) => {
+    const call = byHash.get(token.hash);
+    if (!call || call.category !== "contract-call" || call.value !== 0) return token;
+    absorbed.add(call.hash);
+    return {
+      ...token,
+      fee: call.fee,
+      blockHeight: call.blockHeight,
+      status: call.status,
+    };
+  });
+
+  return [...native.filter((tx) => !absorbed.has(tx.hash)), ...enriched];
 }
 
 // --- Adapter --------------------------------------------------------------
@@ -153,18 +243,30 @@ export function createTronAdapter(apiKey: string | undefined): ChainAdapter {
         only_confirmed: "true",
       });
 
-      const data = await fetchJson(
-        `${BASE_URL}/accounts/${encodeURIComponent(address)}/transactions?${params}`,
-        {
-          provider: PROVIDER,
-          schema: tronGridResponseSchema,
-          headers: apiKey ? { "TRON-PRO-API-KEY": apiKey } : undefined,
-          revalidate: options.revalidate,
-        },
-      );
+      const base = `${BASE_URL}/accounts/${encodeURIComponent(address)}`;
+      const common = {
+        provider: PROVIDER,
+        headers: apiKey ? { "TRON-PRO-API-KEY": apiKey } : undefined,
+        revalidate: options.revalidate,
+      };
 
-      const txs = data.data.map((tx) => normalizeTronGridTx(tx, address));
-      return sortNewestFirst(transactionListSchema.parse(txs));
+      const [data, trc20] = await Promise.all([
+        fetchJson(`${base}/transactions?${params}`, {
+          ...common,
+          schema: tronGridResponseSchema,
+        }),
+        // Token history is enrichment: if it fails, still show native history.
+        fetchJson(`${base}/transactions/trc20?${params}`, {
+          ...common,
+          schema: trc20ResponseSchema,
+        }).catch(() => null),
+      ]);
+
+      const native = data.data.map((tx) => normalizeTronGridTx(tx, address));
+      const tokens = trc20?.data.map((t) => normalizeTrc20Transfer(t, address)) ?? [];
+      return sortNewestFirst(
+        transactionListSchema.parse(mergeTokenTransfers(native, tokens)),
+      );
     },
   };
 }

@@ -2,8 +2,19 @@ import { env } from "@/lib/env";
 
 import { createCoinGeckoClient, type PriceClient } from "./coingecko";
 
-export type { PriceClient, PriceMap, PriceQuote } from "./coingecko";
-export { priceMapSchema, priceQuoteSchema } from "./coingecko";
+export type {
+  DailyPrices,
+  PriceClient,
+  PriceMap,
+  PriceQuote,
+  TokenPriceMap,
+} from "./coingecko";
+export {
+  dailyPricesSchema,
+  priceMapSchema,
+  priceQuoteSchema,
+  tokenPriceMapSchema,
+} from "./coingecko";
 
 let client: PriceClient | undefined;
 

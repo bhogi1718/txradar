@@ -1,7 +1,7 @@
-import type { Transaction } from "@/lib/schemas/transaction";
+import { isNative, type Transaction } from "@/lib/schemas/transaction";
 
 export type WalletSummary = {
-  /** Native units received (successful `in` txs only). */
+  /** Native units received (successful native `in` txs; tokens are summarized separately). */
   inflow: number;
   /** Native units sent to others (successful `out` txs only). */
   outflow: number;
@@ -32,7 +32,9 @@ export function counterpartyOf(tx: Transaction): string | null {
 /**
  * Aggregate a set of already-normalized transactions. Failed txs count
  * toward `failed` and `fees` (gas is burned regardless) but never toward
- * inflow/outflow — their value never moved.
+ * inflow/outflow — their value never moved. Token transfers count toward
+ * `counts` and pay native `fees`, but their amounts are in other units and
+ * are left to `summarizeTokens`.
  */
 export function summarize(txs: readonly Transaction[]): WalletSummary {
   let inflow = 0;
@@ -49,7 +51,7 @@ export function summarize(txs: readonly Transaction[]): WalletSummary {
     if (tx.status === "pending") counts.pending += 1;
     if (tx.fee !== null) fees += tx.fee;
 
-    if (tx.status !== "failed") {
+    if (tx.status !== "failed" && isNative(tx)) {
       if (tx.direction === "in") inflow += tx.value;
       else if (tx.direction === "out") outflow += tx.value;
     }

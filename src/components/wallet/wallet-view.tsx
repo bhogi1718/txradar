@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Segmented } from "@/components/common/segmented";
 import { useFilterParams } from "@/hooks/use-filter-params";
+import { usePriceHistory, useTokenPrices } from "@/hooks/use-price-history";
 import { usePrices } from "@/hooks/use-prices";
 import { useRecentSearches } from "@/hooks/use-recent-searches";
 import { useTransactions } from "@/hooks/use-transactions";
@@ -16,14 +17,19 @@ import {
   type DirectionFilter,
   type RangePreset,
 } from "@/lib/analytics/filters";
+import { summarizeExposure } from "@/lib/analytics/entities";
 import { summarize } from "@/lib/analytics/summary";
+import { summarizeTokens, tokenContracts } from "@/lib/analytics/tokens";
+import { summarizeUsd, type PricingContext } from "@/lib/analytics/valuation";
 import { formatCount } from "@/lib/format";
 import { CHAIN_META, type Chain } from "@/lib/schemas/chain";
 import type { Transaction } from "@/lib/schemas/transaction";
 
+import { EntitiesPanel } from "./entities-panel";
 import { FlowChart } from "./flow-chart";
 import { EmptyState, ErrorState, ScanningState } from "./states";
 import { SummaryStrip } from "./summary-strip";
+import { TokensPanel } from "./tokens-panel";
 import { TransactionsTable } from "./transactions-table";
 import { WalletHeader } from "./wallet-header";
 
@@ -61,7 +67,24 @@ export function WalletView({ chain, address }: { chain: Chain; address: string }
   const [searchDraft, setSearchDraft] = useState(filters.q);
 
   const all = query.data?.transactions ?? EMPTY;
-  const price = prices.data?.prices[chain]?.usd;
+  const history = usePriceHistory(chain);
+  const contracts = useMemo(() => tokenContracts(all), [all]);
+  const tokenPrices = useTokenPrices(chain, contracts);
+
+  const current = prices.data?.prices[chain]?.usd;
+  const pricing = useMemo<PricingContext>(
+    () => ({
+      history: history.data?.prices,
+      current,
+      // undefined (still loading / failed) vs {} (loaded, none priced) matters:
+      // only the latter marks tokens as unverified.
+      tokens:
+        contracts.length === 0 || tokenPrices.isSuccess
+          ? (tokenPrices.data?.prices ?? {})
+          : undefined,
+    }),
+    [history.data, current, contracts.length, tokenPrices.isSuccess, tokenPrices.data],
+  );
 
   useEffect(() => {
     if (query.isSuccess) addRecent(chain, address);
@@ -79,6 +102,18 @@ export function WalletView({ chain, address }: { chain: Chain; address: string }
     [all, filters.range, now],
   );
   const summary = useMemo(() => summarize(inWindow), [inWindow]);
+  const usdSummary = useMemo(
+    () =>
+      pricing.history || pricing.current !== undefined
+        ? summarizeUsd(inWindow, pricing)
+        : null,
+    [inWindow, pricing],
+  );
+  const exposure = useMemo(() => summarizeExposure(inWindow), [inWindow]);
+  const tokens = useMemo(
+    () => summarizeTokens(inWindow, pricing.tokens),
+    [inWindow, pricing.tokens],
+  );
   const rows = useMemo(() => applyFilters(all, filters, now), [all, filters, now]);
   const chartRange = useMemo(() => {
     const from = rangeStart(filters.range, now);
@@ -93,6 +128,14 @@ export function WalletView({ chain, address }: { chain: Chain; address: string }
     }
     return c;
   }, [inWindow]);
+
+  function focusSearch(term: string) {
+    setSearchDraft(term);
+    setFilters({ q: term, dir: "all" });
+    document
+      .getElementById("transactions")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const filtersActive =
     filters.dir !== "all" ||
@@ -225,14 +268,19 @@ export function WalletView({ chain, address }: { chain: Chain; address: string }
         </p>
       </div>
 
-      <SummaryStrip summary={summary} symbol={meta.symbol} price={price} />
+      <SummaryStrip summary={summary} symbol={meta.symbol} usd={usdSummary} />
 
       <FlowChart txs={inWindow} symbol={meta.symbol} range={chartRange} />
+
+      <div className={tokens.length > 0 ? "grid gap-6 lg:grid-cols-2" : "grid gap-6"}>
+        <EntitiesPanel exposure={exposure} symbol={meta.symbol} onSelect={focusSearch} />
+        {tokens.length > 0 && <TokensPanel tokens={tokens} onSelect={focusSearch} />}
+      </div>
 
       <TransactionsTable
         data={rows}
         chain={chain}
-        price={price}
+        pricing={pricing}
         toolbar={toolbar}
         empty={
           <EmptyState

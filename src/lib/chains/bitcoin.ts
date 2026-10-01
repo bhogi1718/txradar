@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CHAIN_META } from "@/lib/schemas/chain";
+import { CHAIN_META, nativeAsset } from "@/lib/schemas/chain";
 import { transactionListSchema, type Transaction } from "@/lib/schemas/transaction";
 
 import {
@@ -139,6 +139,7 @@ export function normalizeEsploraTx(
     blockHeight: confirmed ? (tx.status.block_height ?? null) : null,
     from: direction === "in" ? firstInputAddress : wallet,
     to: direction === "out" ? firstOtherOutput : wallet,
+    asset: nativeAsset("bitcoin"),
     value: fromBaseUnits(value, decimals),
     fee: walletPaidFee ? fromBaseUnits(tx.fee, decimals) : null,
     direction,

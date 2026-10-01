@@ -30,6 +30,17 @@ export const txCategorySchema = z.enum([
 export type TxCategory = z.infer<typeof txCategorySchema>;
 
 /**
+ * What moved. `contract` is null for the chain's native coin (BTC/ETH/TRX)
+ * and the token contract address otherwise (e.g. USDT on Tron).
+ */
+export const assetSchema = z.object({
+  symbol: z.string().min(1),
+  contract: z.string().min(1).nullable(),
+  decimals: z.number().int().nonnegative(),
+});
+export type Asset = z.infer<typeof assetSchema>;
+
+/**
  * One normalized transaction. Every chain adapter produces exactly this
  * shape so the UI never has to know which explorer the data came from.
  */
@@ -42,12 +53,14 @@ export const transactionSchema = z.object({
   /** Normalized (chain-canonical casing) address, or null when unknown. */
   from: z.string().min(1).nullable(),
   to: z.string().min(1).nullable(),
+  /** The asset `value` is denominated in. */
+  asset: assetSchema,
   /**
-   * Amount in native units (BTC / ETH / TRX) as seen from the wallet:
-   * what entered on `in`, what reached others on `out`, what was moved on `self`.
+   * Amount in `asset` units as seen from the wallet: what entered on `in`,
+   * what reached others on `out`, what was moved on `self`.
    */
   value: z.number().nonnegative(),
-  /** Network fee in native units. Null when not attributable to the wallet. */
+  /** Network fee, always in the chain's native coin. Null when not paid by the wallet. */
   fee: z.number().nonnegative().nullable(),
   direction: directionSchema,
   status: txStatusSchema,
@@ -61,3 +74,8 @@ export const transactionSchema = z.object({
 export type Transaction = z.infer<typeof transactionSchema>;
 
 export const transactionListSchema = z.array(transactionSchema);
+
+/** True when the transaction moved the chain's native coin. */
+export function isNative(tx: Pick<Transaction, "asset">): boolean {
+  return tx.asset.contract === null;
+}

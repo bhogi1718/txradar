@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { getLabel } from "@/lib/labels";
 import type { Transaction } from "@/lib/schemas/transaction";
 
 import { counterpartyOf } from "./summary";
@@ -86,11 +87,17 @@ export function applyFilters(
     if (filters.dir !== "all" && tx.direction !== filters.dir) return false;
     if (filters.hideFailed && tx.status === "failed") return false;
     if (q) {
-      const cp = counterpartyOf(tx)?.toLowerCase() ?? "";
-      const method = tx.method?.toLowerCase() ?? "";
-      if (!tx.hash.toLowerCase().includes(q) && !cp.includes(q) && !method.includes(q)) {
-        return false;
-      }
+      const cp = counterpartyOf(tx);
+      const haystack = [
+        tx.hash,
+        cp ?? "",
+        tx.method ?? "",
+        tx.asset.symbol,
+        getLabel(tx.chain, cp)?.name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
     }
     return true;
   });

@@ -14,11 +14,19 @@ export type ChainMeta = {
   decimals: number;
   /** CoinGecko coin id, used for pricing. */
   coingeckoId: string;
+  /** CoinGecko asset-platform id, used for token prices. */
+  coingeckoPlatform: string;
   explorer: {
     tx: (hash: string) => string;
     address: (address: string) => string;
   };
 };
+
+/** The native-coin asset descriptor for a chain. */
+export function nativeAsset(chain: Chain) {
+  const { symbol, decimals } = CHAIN_META[chain];
+  return { symbol, contract: null, decimals };
+}
 
 export const CHAIN_META: Record<Chain, ChainMeta> = {
   bitcoin: {
@@ -27,6 +35,7 @@ export const CHAIN_META: Record<Chain, ChainMeta> = {
     symbol: "BTC",
     decimals: 8,
     coingeckoId: "bitcoin",
+    coingeckoPlatform: "bitcoin",
     explorer: {
       tx: (h) => `https://mempool.space/tx/${h}`,
       address: (a) => `https://mempool.space/address/${a}`,
@@ -38,6 +47,7 @@ export const CHAIN_META: Record<Chain, ChainMeta> = {
     symbol: "ETH",
     decimals: 18,
     coingeckoId: "ethereum",
+    coingeckoPlatform: "ethereum",
     explorer: {
       tx: (h) => `https://etherscan.io/tx/${h}`,
       address: (a) => `https://etherscan.io/address/${a}`,
@@ -49,6 +59,7 @@ export const CHAIN_META: Record<Chain, ChainMeta> = {
     symbol: "TRX",
     decimals: 6,
     coingeckoId: "tron",
+    coingeckoPlatform: "tron",
     explorer: {
       tx: (h) => `https://tronscan.org/#/transaction/${h}`,
       address: (a) => `https://tronscan.org/#/address/${a}`,

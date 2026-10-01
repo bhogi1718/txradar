@@ -61,7 +61,7 @@ automatically.
 ```
 src/
   app/
-    api/            # Route handlers: /api/transactions, /api/prices, /api/health
+    api/            # Route handlers: transactions, prices, price-history, token-prices, health
     [chain]/[address]/  # Wallet page
     ...             # Home, layout, 404, error boundary, design tokens (globals.css)
   components/
@@ -77,7 +77,8 @@ src/
     api/            # Shared contracts, envelope helpers, browser client
     chains/         # Per-chain adapters (bitcoin.ts, ethereum.ts, tron.ts),
                      # address validation, unit conversion, HTTP + error helpers
-    prices/         # CoinGecko client
+    labels/         # Curated, source-linked address labels
+    prices/         # CoinGecko client (current, daily history, token prices)
     schemas/        # Zod schemas: Chain, Transaction
     cache.ts        # In-memory TTL cache with request coalescing
     env.ts          # Validated server-side environment
@@ -93,7 +94,8 @@ Built in phases; see the project plan for the full roadmap. Done so far:
 - ✅ Phase 2 — API routes (validated, cached, uniform error envelope)
 - ✅ Phase 3 — Core UI (chain auto-detecting search, wallet page with summary, flow
   timeline, filterable/sortable table; filters in the URL)
-- ⬜ Phase 4 — Enrichment (USD values, exchange labels, TRC-20 support)
+- ✅ Phase 4 — Enrichment (USD at transfer-day prices, verified exchange/contract labels,
+  account-type-aware ETH contract detection, TRC-20 token transfers)
 - ⬜ Phase 5 — Drill-down, counterparty grouping, CSV export
 - ⬜ Phase 6 — Hardening (pagination, error boundaries, e2e tests)
 
