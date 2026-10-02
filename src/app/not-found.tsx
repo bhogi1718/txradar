@@ -9,7 +9,10 @@ export default function NotFound() {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center px-4 py-20 text-center">
+      <main
+        id="main"
+        className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center px-4 py-20 text-center"
+      >
         <RadarScope className="w-28" blips={[]} />
         <p className="mt-8 mono-data text-xs tracking-widest text-primary uppercase">
           404 · no signal

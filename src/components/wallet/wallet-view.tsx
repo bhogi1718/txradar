@@ -4,6 +4,7 @@ import { History, Info, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { SectionBoundary } from "@/components/common/section-boundary";
 import { Segmented } from "@/components/common/segmented";
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { usePriceHistory, useTokenPrices } from "@/hooks/use-price-history";
@@ -347,59 +348,67 @@ export function WalletView({
         </div>
       </div>
 
-      <SummaryStrip summary={summary} symbol={meta.symbol} usd={usdSummary} />
+      <SectionBoundary name="summary">
+        <SummaryStrip summary={summary} symbol={meta.symbol} usd={usdSummary} />
+      </SectionBoundary>
 
-      <FlowChart txs={inWindow} symbol={meta.symbol} range={chartRange} />
+      <SectionBoundary name="flow timeline">
+        <FlowChart txs={inWindow} symbol={meta.symbol} range={chartRange} />
+      </SectionBoundary>
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <CounterpartiesPanel
-          counterparties={counterparties}
-          symbol={meta.symbol}
-          onOpen={openCounterparty}
-        />
-        <div className="grid gap-6">
-          <EntitiesPanel
-            exposure={exposure}
+      <SectionBoundary name="counterparty panels">
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <CounterpartiesPanel
+            counterparties={counterparties}
             symbol={meta.symbol}
-            onSelect={focusSearch}
+            onOpen={openCounterparty}
           />
-          {tokens.length > 0 && <TokensPanel tokens={tokens} onSelect={focusSearch} />}
+          <div className="grid gap-6">
+            <EntitiesPanel
+              exposure={exposure}
+              symbol={meta.symbol}
+              onSelect={focusSearch}
+            />
+            {tokens.length > 0 && <TokensPanel tokens={tokens} onSelect={focusSearch} />}
+          </div>
         </div>
-      </div>
+      </SectionBoundary>
 
-      <TransactionsTable
-        data={rows}
-        chain={chain}
-        pricing={pricing}
-        onOpenCounterparty={openCounterparty}
-        onExport={exportRows}
-        footerExtra={query.hasNextPage ? loadOlderButton : null}
-        toolbar={toolbar}
-        empty={
-          <EmptyState
-            title="Nothing matches these filters"
-            body={
-              inWindow.length === 0
-                ? "No activity in this time window. Try a wider range."
-                : "Try a different direction or clear the search."
-            }
-            action={
-              filtersActive && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchDraft("");
-                    setFilters(DEFAULT_FILTERS);
-                  }}
-                  className="inline-flex h-8 items-center rounded-lg bg-secondary px-3 text-xs font-medium outline-none hover:bg-secondary/80 focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  Clear all filters
-                </button>
-              )
-            }
-          />
-        }
-      />
+      <SectionBoundary name="transactions table">
+        <TransactionsTable
+          data={rows}
+          chain={chain}
+          pricing={pricing}
+          onOpenCounterparty={openCounterparty}
+          onExport={exportRows}
+          footerExtra={query.hasNextPage ? loadOlderButton : null}
+          toolbar={toolbar}
+          empty={
+            <EmptyState
+              title="Nothing matches these filters"
+              body={
+                inWindow.length === 0
+                  ? "No activity in this time window. Try a wider range."
+                  : "Try a different direction or clear the search."
+              }
+              action={
+                filtersActive && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchDraft("");
+                      setFilters(DEFAULT_FILTERS);
+                    }}
+                    className="inline-flex h-8 items-center rounded-lg bg-secondary px-3 text-xs font-medium outline-none hover:bg-secondary/80 focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    Clear all filters
+                  </button>
+                )
+              }
+            />
+          }
+        />
+      </SectionBoundary>
 
       <CounterpartyInspector
         chain={chain}

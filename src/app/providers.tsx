@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import { useState, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
@@ -27,9 +28,17 @@ export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(makeQueryClient);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider delay={200}>{children}</TooltipProvider>
-      <Toaster position="bottom-right" richColors closeButton />
-    </QueryClientProvider>
+    // Dark is the designed default; "system" follows the OS once the user opts in.
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="dark"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider delay={200}>{children}</TooltipProvider>
+        <Toaster position="bottom-right" richColors closeButton />
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { RadarMark } from "@/components/brand/radar-mark";
 import { WalletSearch } from "@/components/search/wallet-search";
+
+import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/utils";
 
 export function SiteHeader({ showSearch = false }: { showSearch?: boolean }) {
@@ -29,12 +31,15 @@ export function SiteHeader({ showSearch = false }: { showSearch?: boolean }) {
           </div>
         )}
 
-        <div className="ml-auto hidden shrink-0 items-center gap-2 text-xs text-muted-foreground sm:flex">
-          <span className="relative flex size-2">
-            <span className="absolute inline-flex size-full animate-radar-ping rounded-full bg-primary/60" />
-            <span className="relative inline-flex size-2 rounded-full bg-primary" />
-          </span>
-          <span className="mono-data tracking-wider uppercase">local</span>
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          <ThemeToggle />
+          <div className="hidden shrink-0 items-center gap-2 text-xs text-muted-foreground sm:flex">
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex size-full animate-radar-ping rounded-full bg-primary/60" />
+              <span className="relative inline-flex size-2 rounded-full bg-primary" />
+            </span>
+            <span className="mono-data tracking-wider uppercase">local</span>
+          </div>
         </div>
       </div>
     </header>

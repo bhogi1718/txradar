@@ -1,6 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight, Link2, Network } from "lucide-react";
 
 import { RadarScope } from "@/components/common/radar-scope";
+import { SectionBoundary } from "@/components/common/section-boundary";
 import { PriceTicker } from "@/components/home/price-ticker";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
@@ -34,7 +35,7 @@ export default function HomePage() {
   return (
     <>
       <SiteHeader />
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         <section className="relative mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-12 overflow-hidden px-4 pt-16 pb-12 sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:pt-24">
           <div className="relative z-10 min-w-0">
             <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/5 px-3 py-1 mono-data text-[11px] tracking-widest text-primary uppercase">
@@ -64,7 +65,9 @@ export default function HomePage() {
         </section>
 
         <section className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6">
-          <PriceTicker />
+          <SectionBoundary name="price ticker">
+            <PriceTicker />
+          </SectionBoundary>
         </section>
 
         <section className="mx-auto w-full max-w-7xl px-4 pb-20 sm:px-6">
