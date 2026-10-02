@@ -84,7 +84,9 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.02 250);
 
-  --primary: oklch(0.55 0.13 170);
+  /* Light-theme accents are darker than dark-theme ones to hold WCAG AA
+     (4.5:1) for small text on white and on their own 10% tints. */
+  --primary: oklch(0.48 0.12 170);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.95 0.01 240);
   --secondary-foreground: oklch(0.18 0.02 250);
@@ -96,13 +98,13 @@
 
   --border: oklch(0.9 0.01 240);
   --input: oklch(0.9 0.01 240);
-  --ring: oklch(0.6 0.12 170);
+  --ring: oklch(0.55 0.12 170);
 
-  --inflow: oklch(0.58 0.16 155);
-  --outflow: oklch(0.6 0.2 25);
-  --chain-btc: oklch(0.7 0.17 60);
-  --chain-eth: oklch(0.58 0.16 280);
-  --chain-trx: oklch(0.6 0.22 25);
+  --inflow: oklch(0.5 0.14 155);
+  --outflow: oklch(0.53 0.2 25);
+  --chain-btc: oklch(0.53 0.14 55);
+  --chain-eth: oklch(0.5 0.17 280);
+  --chain-trx: oklch(0.52 0.2 25);
   --grid-line: oklch(0 0 0 / 4%);
 
   --chart-1: var(--primary);
