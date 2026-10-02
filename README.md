@@ -73,7 +73,8 @@ src/
     ui/             # shadcn/ui primitives
   hooks/            # useTransactions, usePrices, URL-backed filters, recent searches
   lib/
-    analytics/      # Summary, time bucketing, filters (pure, tested)
+    analytics/      # Summary, buckets, filters, valuation, counterparties (pure, tested)
+    export/         # CSV export (RFC 4180, formula-injection safe)
     api/            # Shared contracts, envelope helpers, browser client
     chains/         # Per-chain adapters (bitcoin.ts, ethereum.ts, tron.ts),
                      # address validation, unit conversion, HTTP + error helpers
@@ -96,7 +97,8 @@ Built in phases; see the project plan for the full roadmap. Done so far:
   timeline, filterable/sortable table; filters in the URL)
 - ✅ Phase 4 — Enrichment (USD at transfer-day prices, verified exchange/contract labels,
   account-type-aware ETH contract detection, TRC-20 token transfers)
-- ⬜ Phase 5 — Drill-down, counterparty grouping, CSV export
+- ✅ Phase 5 — Counterparty inspector with multi-hop drill-down (shareable via `?trail=`),
+  top-counterparties panel, CSV export of the filtered, sorted table
 - ⬜ Phase 6 — Hardening (pagination, error boundaries, e2e tests)
 
 ## Notes

@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Download,
   CircleAlert,
   TriangleAlert,
   Clock,
@@ -26,6 +27,7 @@ import {
 import { useMemo, type ReactNode } from "react";
 
 import { Address } from "@/components/common/address";
+import { CopyButton } from "@/components/common/copy-button";
 import { EntityTag } from "@/components/common/entity-tag";
 import { Segmented } from "@/components/common/segmented";
 import { counterpartyOf } from "@/lib/analytics/summary";
@@ -139,7 +141,11 @@ function StatusMark({ status }: { status: Transaction["status"] }) {
   return null;
 }
 
-function buildColumns(chain: Chain, pricing: PricingContext) {
+function buildColumns(
+  chain: Chain,
+  pricing: PricingContext,
+  onOpenCounterparty?: (address: string) => void,
+) {
   const { symbol, explorer } = CHAIN_META[chain];
 
   return helper.columns([
@@ -174,11 +180,34 @@ function buildColumns(chain: Chain, pricing: PricingContext) {
         if (tx.direction === "self") {
           return <span className="text-xs text-muted-foreground">Own wallet</span>;
         }
-        const label = getLabel(tx.chain, info.getValue());
+        const address = info.getValue();
+        const label = getLabel(tx.chain, address);
+        if (!address || !onOpenCounterparty) {
+          return (
+            <div className="flex items-center gap-1.5">
+              {label && <EntityTag label={label} />}
+              <Address value={address} head={label ? 4 : 6} />
+            </div>
+          );
+        }
         return (
-          <div className="flex items-center gap-1.5">
-            {label && <EntityTag label={label} />}
-            <Address value={info.getValue()} head={label ? 4 : 6} />
+          <div className="group/address flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onOpenCounterparty(address)}
+              className="flex items-center gap-1.5 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              title={`Inspect ${address}`}
+            >
+              {label && <EntityTag label={label} />}
+              <span className="mono-data text-[13px] underline-offset-4 group-hover/address:text-primary group-hover/address:underline">
+                {truncateAddress(address, label ? 4 : 6, 4)}
+              </span>
+            </button>
+            <CopyButton
+              value={address}
+              label="Copy address"
+              className="size-5 opacity-0 transition-opacity group-hover/address:opacity-100 focus-visible:opacity-100"
+            />
           </div>
         );
       },
@@ -320,15 +349,24 @@ export function TransactionsTable({
   pricing,
   toolbar,
   empty,
+  onOpenCounterparty,
+  onExport,
 }: {
   data: Transaction[];
   chain: Chain;
   pricing: PricingContext;
   toolbar?: ReactNode;
+  /** Make counterparty cells open the inspector. Must be referentially stable. */
+  onOpenCounterparty?: (address: string) => void;
+  /** Export the filtered rows, in the table's current sort order. */
+  onExport?: (rows: Transaction[]) => void;
   /** Rendered in place of rows when `data` is empty. */
   empty?: ReactNode;
 }) {
-  const columns = useMemo(() => buildColumns(chain, pricing), [chain, pricing]);
+  const columns = useMemo(
+    () => buildColumns(chain, pricing, onOpenCounterparty),
+    [chain, pricing, onOpenCounterparty],
+  );
 
   const table = useTable({
     features,
@@ -441,12 +479,26 @@ export function TransactionsTable({
           </div>
 
           <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted-foreground">
-              Showing{" "}
-              <span className="mono-data text-foreground">{formatCount(firstRow)}</span>–
-              <span className="mono-data text-foreground">{formatCount(lastRow)}</span> of{" "}
-              <span className="mono-data text-foreground">{formatCount(total)}</span>
-            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-xs text-muted-foreground">
+                Showing{" "}
+                <span className="mono-data text-foreground">{formatCount(firstRow)}</span>
+                –<span className="mono-data text-foreground">{formatCount(lastRow)}</span>{" "}
+                of <span className="mono-data text-foreground">{formatCount(total)}</span>
+              </p>
+              {onExport && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onExport(table.getPrePaginatedRowModel().rows.map((r) => r.original))
+                  }
+                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-xs font-medium outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                  title="Download the filtered rows as CSV, in the current sort order"
+                >
+                  <Download className="size-3.5" /> Export CSV
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-3">
               <Segmented
                 aria-label="Rows per page"

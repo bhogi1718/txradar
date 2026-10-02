@@ -1,7 +1,8 @@
 "use client";
 
 import { Info, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Segmented } from "@/components/common/segmented";
 import { useFilterParams } from "@/hooks/use-filter-params";
@@ -18,13 +19,19 @@ import {
   type RangePreset,
   type TxFilters,
 } from "@/lib/analytics/filters";
+import { summarizeCounterparties } from "@/lib/analytics/counterparties";
 import { summarizeExposure } from "@/lib/analytics/entities";
 import { summarize } from "@/lib/analytics/summary";
 import { summarizeTokens, tokenContracts } from "@/lib/analytics/tokens";
 import { summarizeUsd, type PricingContext } from "@/lib/analytics/valuation";
+import { isValidAddress, normalizeAddress } from "@/lib/chains/address";
+import { csvFileName, downloadCsv, transactionsToCsv } from "@/lib/export/csv";
 import { formatCount } from "@/lib/format";
 import { CHAIN_META, type Chain } from "@/lib/schemas/chain";
 import type { Transaction } from "@/lib/schemas/transaction";
+
+import { CounterpartiesPanel } from "./counterparties-panel";
+import { CounterpartyInspector } from "./counterparty-inspector";
 
 import { EntitiesPanel } from "./entities-panel";
 import { FlowChart } from "./flow-chart";
@@ -114,6 +121,33 @@ export function WalletView({
     [inWindow, pricing],
   );
   const exposure = useMemo(() => summarizeExposure(inWindow), [inWindow]);
+  const counterparties = useMemo(() => summarizeCounterparties(inWindow), [inWindow]);
+
+  // Drop anything in a shared link that isn't an address on this chain.
+  const trail = useMemo(
+    () =>
+      filters.trail
+        .filter((a) => isValidAddress(chain, a))
+        .map((a) => normalizeAddress(chain, a)),
+    [filters.trail, chain],
+  );
+  const openCounterparty = useCallback(
+    (addr: string) => setFilters({ trail: [addr] }),
+    [setFilters],
+  );
+  const setTrail = useCallback((t: string[]) => setFilters({ trail: t }), [setFilters]);
+  const exportRows = useCallback(
+    (rowsToExport: Transaction[]) => {
+      downloadCsv(
+        transactionsToCsv(rowsToExport, { pricing }),
+        csvFileName(chain, address, filters.range),
+      );
+      toast.success(
+        `Exported ${formatCount(rowsToExport.length)} transaction${rowsToExport.length === 1 ? "" : "s"}`,
+      );
+    },
+    [pricing, chain, address, filters.range],
+  );
   const tokens = useMemo(
     () => summarizeTokens(inWindow, pricing.tokens),
     [inWindow, pricing.tokens],
@@ -135,7 +169,7 @@ export function WalletView({
 
   function focusSearch(term: string) {
     setSearchDraft(term);
-    setFilters({ q: term, dir: "all" });
+    setFilters({ q: term, dir: "all", trail: [] });
     document
       .getElementById("transactions")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -276,19 +310,28 @@ export function WalletView({
 
       <FlowChart txs={inWindow} symbol={meta.symbol} range={chartRange} />
 
-      <div
-        className={
-          tokens.length > 0 ? "grid items-start gap-6 lg:grid-cols-2" : "grid gap-6"
-        }
-      >
-        <EntitiesPanel exposure={exposure} symbol={meta.symbol} onSelect={focusSearch} />
-        {tokens.length > 0 && <TokensPanel tokens={tokens} onSelect={focusSearch} />}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <CounterpartiesPanel
+          counterparties={counterparties}
+          symbol={meta.symbol}
+          onOpen={openCounterparty}
+        />
+        <div className="grid gap-6">
+          <EntitiesPanel
+            exposure={exposure}
+            symbol={meta.symbol}
+            onSelect={focusSearch}
+          />
+          {tokens.length > 0 && <TokensPanel tokens={tokens} onSelect={focusSearch} />}
+        </div>
       </div>
 
       <TransactionsTable
         data={rows}
         chain={chain}
         pricing={pricing}
+        onOpenCounterparty={openCounterparty}
+        onExport={exportRows}
         toolbar={toolbar}
         empty={
           <EmptyState
@@ -314,6 +357,14 @@ export function WalletView({
             }
           />
         }
+      />
+
+      <CounterpartyInspector
+        chain={chain}
+        root={address}
+        trail={trail}
+        onTrailChange={setTrail}
+        onShowInTable={focusSearch}
       />
     </div>
   );
