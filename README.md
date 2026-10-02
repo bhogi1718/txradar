@@ -1,16 +1,17 @@
 <div align="center">
 
-# 📡 TxRadar
+<img src="docs/banner.jpg" alt="TxRadar: see where the money moves. A local-first wallet explorer for Bitcoin, Ethereum and Tron." width="100%" />
 
-**See where the money moves.**
+<h1>TxRadar</h1>
 
-A fast, private, local-first transaction explorer for **Bitcoin**, **Ethereum** and **Tron**.
+**A fast, private, local-first transaction explorer for Bitcoin, Ethereum and Tron.**
+<br />
 Paste any wallet address and get its inflows, outflows, tokens, counterparties and exchange
-exposure on one radar-style dashboard. No signup, no paid services, no data leaves your machine
-except calls to public block explorers.
+exposure on one radar-style dashboard. No signup, no paid services.
 
 [![CI](https://github.com/bhogi1718/txradar/actions/workflows/ci.yml/badge.svg)](https://github.com/bhogi1718/txradar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-teal.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/bhogi1718/txradar?color=0d9488)](https://github.com/bhogi1718/txradar/releases)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React 19](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
 ![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
@@ -22,14 +23,39 @@ except calls to public block explorers.
 ![WCAG 2.1 AA](https://img.shields.io/badge/a11y-WCAG%202.1%20AA-6f42c1)
 ![CSP](https://img.shields.io/badge/security-strict%20CSP-0d9488)
 
-[Features](#-features) · [Screenshots](#-screenshots) · [Quick start](#-quick-start) ·
-[How it works](#-how-it-works) · [Quality](#-quality) · [Tech stack](#-tech-stack)
-
-<br />
-
-![TxRadar wallet view](docs/screenshots/wallet-dark.jpg)
+[Demo](#-demo) · [Features](#-features) · [Screenshots](#-screenshots) ·
+[Quick start](#-quick-start) · [How it works](#-how-it-works) · [Quality](#-quality) ·
+[Contributing](#-contributing)
 
 </div>
+
+---
+
+## 🎬 Demo
+
+<div align="center">
+
+<img src="docs/demo.gif" alt="Demo: pasting an address, exploring the wallet dashboard, opening a counterparty and filtering transactions" width="100%" />
+
+<sub>Paste an address → wallet dashboard → inspect a counterparty → filter and search the
+history. Recorded on live data.</sub>
+
+</div>
+
+## 💡 Why TxRadar?
+
+Block explorers show you one transaction at a time. TxRadar shows you the **story of a
+wallet**:
+
+|                                         | Typical block explorer | TxRadar                                 |
+| --------------------------------------- | ---------------------- | --------------------------------------- |
+| Bitcoin, Ethereum and Tron in one place | ❌ One site per chain  | ✅ Auto-detected from the address       |
+| Wallet net flow over time, in USD       | ❌                     | ✅ Each transfer at its own day's price |
+| Token transfers, internal txs and fees  | Split across tabs      | ✅ One merged, deduplicated list        |
+| Airdropped spam tokens                  | Mixed in               | ✅ Hidden by default                    |
+| Who a wallet deals with most            | ❌                     | ✅ Ranked counterparties + drill-down   |
+| Exchange exposure                       | Labels only            | ✅ Share of volume touching exchanges   |
+| Accounts, ads, tracking                 | Often                  | ✅ None, it runs on your machine        |
 
 ---
 
@@ -349,6 +375,16 @@ decimals; the label set is deliberately small but verified.
 
 ---
 
+## 🤝 Contributing
+
+Contributions are welcome: bug reports, feature ideas, new verified labels or code. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup and guidelines, and use the
+[issue templates](https://github.com/bhogi1718/txradar/issues/new/choose) to report bugs or
+suggest features. Found a security issue? Please follow [SECURITY.md](SECURITY.md) and
+report it privately.
+
+If TxRadar is useful to you, a ⭐ on the repo is much appreciated.
+
 ## ⚠️ Disclaimer
 
 TxRadar reads public blockchain data for informational purposes only. It is not financial
@@ -365,5 +401,6 @@ Data from [Etherscan](https://etherscan.io), [Blockstream Esplora](https://block
 [MIT](LICENSE) © 2026 Charan Tej
 
 <div align="center">
-<sub>Built with Next.js, TypeScript and a lot of block explorer JSON.</sub>
+<sub>Built by <a href="https://github.com/bhogi1718">Charan Tej</a> with Next.js, TypeScript
+and a lot of block explorer JSON.</sub>
 </div>

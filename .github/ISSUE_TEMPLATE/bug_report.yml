@@ -1,0 +1,44 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a bug! Please don't paste API keys.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open /ethereum/0x…
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: chain
+    attributes:
+      label: Chain
+      options: [Bitcoin, Ethereum, Tron, Not chain-specific]
+  - type: input
+    id: address
+    attributes:
+      label: Wallet address (optional)
+      description: A public address that shows the problem, if it's safe to share.
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "Windows 11, Chrome 140, Node 24"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      render: shell
