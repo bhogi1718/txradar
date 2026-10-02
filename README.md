@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-teal.svg)](LICENSE)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-black)
 ![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6)
-![Tests](https://img.shields.io/badge/tests-309%20unit%20%2B%2027%20e2e-2ea44f)
+![Tests](https://img.shields.io/badge/tests-316%20unit%20%2B%2029%20e2e-2ea44f)
 ![WCAG 2.1 AA](https://img.shields.io/badge/a11y-WCAG%202.1%20AA-6f42c1)
 
 A local-first crypto transaction tracker for Bitcoin, Ethereum and Tron. Paste a wallet
@@ -125,6 +125,21 @@ Key decisions:
 - **Errors are contained.** Each wallet section has its own error boundary, so one
   failing panel can't take the page down.
 
+## Security & performance
+
+- **Strict, nonce-based CSP.** `src/proxy.ts` issues a fresh nonce per request; scripts run
+  only with that nonce (`'strict-dynamic'`, no `'unsafe-inline'`, no `eval` in
+  production), `connect-src` is limited to this origin, and framing is blocked. An e2e spec
+  drives the app and fails on any CSP violation.
+- **Hardening headers** on every response: `nosniff`, `X-Frame-Options: DENY`, a strict
+  referrer policy, `Cross-Origin-Opener-Policy`, a deny-all `Permissions-Policy`, and no
+  `X-Powered-By`.
+- **Compressed API responses.** Route Handlers gzip their JSON (Next only compresses pages
+  and static files): a 1,000-transaction page goes from ~680 KB to ~90 KB.
+- **Lighthouse** (production build, desktop preset): Performance 99 home / 97 wallet,
+  Accessibility 100, Best Practices 100. SEO reports 60 only because pages are deliberately
+  `noindex` — wallet pages aren't meant for search engines.
+
 ## Scripts
 
 | Command                 | Does                                                       |
@@ -136,7 +151,7 @@ Key decisions:
 | `npm run typecheck`     | Generate route types + `tsc --noEmit`                      |
 | `npm test`              | Unit/integration tests (Vitest)                            |
 | `npm run test:watch`    | Vitest in watch mode                                       |
-| `npm run test:coverage` | Vitest with coverage                                       |
+| `npm run test:coverage` | Vitest with coverage (fails under the thresholds)          |
 | `npm run e2e`           | End-to-end + accessibility tests (Playwright; build first) |
 | `npm run format`        | Format with Prettier                                       |
 | `npm run screenshots`   | Regenerate README screenshots from a running app           |
@@ -155,13 +170,19 @@ A pre-commit hook (Husky + lint-staged) runs ESLint and Prettier on staged files
   error states, 404 and phone layouts.
 - **Accessibility** — axe scans (WCAG 2.1 A/AA) of the home page, wallet pages and the
   inspector in both themes fail the build on serious or critical issues.
+- **Coverage gate** — CI fails if unit coverage drops below 78% lines/statements, 73%
+  branches or 68% functions (currently ~80 / 75 / 70). Page-level wiring such as the
+  wallet view is exercised by Playwright instead.
+- **Security** — e2e checks the CSP and hardening headers, and that a full session (load,
+  inspect, theme switch) triggers no CSP violations.
 
 First run: `npx playwright install chromium`, then `npm run build && npm run e2e`.
 
 ## CI
 
-GitHub Actions on every push and PR: lint · typecheck · format, unit tests with coverage,
-production build, and Playwright end-to-end tests. Dependabot keeps dependencies current.
+GitHub Actions on every push and PR: lint · typecheck · format, unit tests with enforced
+coverage thresholds, production build, and Playwright end-to-end, accessibility and
+security tests. Dependabot keeps dependencies current.
 
 ## Project structure
 
@@ -187,8 +208,10 @@ src/
     labels/             # Curated, source-linked address labels
     prices/             # CoinGecko client (current, daily history, token prices)
     schemas/            # Zod schemas: Chain, Transaction, Asset
+    security/           # Content-Security-Policy builder
     cache.ts            # In-memory TTL cache with request coalescing
     env.ts              # Validated server-side environment
+  proxy.ts              # Per-request CSP nonce
 e2e/                    # Playwright specs + API mocks
 ```
 
@@ -206,6 +229,8 @@ All six planned phases are complete:
   Playwright e2e)
 - ✅ Polish — ERC-20 + internal transactions, spam and liquidity checks, dependency and
   CI upkeep, screenshots, license
+- ✅ Quality gates — coverage thresholds, strict CSP + security headers, gzipped API,
+  Lighthouse audit
 
 Known limits: the label set is deliberately small; TRC-10 token amounts are shown in raw
 units because TronGrid doesn't report their decimals; token USD values use today's price

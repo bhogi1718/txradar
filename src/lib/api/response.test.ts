@@ -5,6 +5,36 @@ import { UpstreamError } from "@/lib/chains/errors";
 import { fail, handleError, ok, parseQuery } from "./response";
 
 describe("api/response", () => {
+  describe("ok() compression", () => {
+    const big = {
+      rows: Array.from({ length: 200 }, (_, i) => ({ hash: `0x${i}`, v: 1 })),
+    };
+    const gzipReq = new Request("http://x", {
+      headers: { "accept-encoding": "gzip, br" },
+    });
+
+    it("gzips large bodies when the client accepts it", async () => {
+      const res = ok(big, { request: gzipReq });
+      expect(res.headers.get("content-encoding")).toBe("gzip");
+      expect(res.headers.get("vary")).toBe("accept-encoding");
+      const raw = new Uint8Array(await res.arrayBuffer());
+      const text = await new Response(
+        new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip")),
+      ).text();
+      expect(JSON.parse(text)).toEqual({ data: big });
+      expect(raw.byteLength).toBeLessThan(text.length / 3);
+    });
+
+    it("sends plain JSON to clients without gzip, and for small bodies", async () => {
+      expect(
+        ok(big, { request: new Request("http://x") }).headers.get("content-encoding"),
+      ).toBeNull();
+      const small = ok({ ok: true }, { request: gzipReq });
+      expect(small.headers.get("content-encoding")).toBeNull();
+      expect(await small.json()).toEqual({ data: { ok: true } });
+    });
+  });
+
   it("ok() wraps data and sets cache headers", async () => {
     const res = ok({ a: 1 }, { maxAge: 60, headers: { "x-cache": "HIT" } });
     expect(res.status).toBe(200);

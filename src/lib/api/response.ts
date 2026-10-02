@@ -23,9 +23,21 @@ export type ApiEnvelope<T> = ApiSuccess<T> | ApiFailure;
 
 const NO_STORE = "no-store";
 
+/** Below this, gzip's framing costs more than it saves. */
+const GZIP_MIN_BYTES = 1024;
+
+/**
+ * Next compresses pages and static files but not Route Handler responses,
+ * and a transactions page is ~700 KB of repetitive JSON (~90% smaller gzipped).
+ */
+function acceptsGzip(request: Request | undefined): boolean {
+  const accept = request?.headers.get("accept-encoding") ?? "";
+  return /\bgzip\b/i.test(accept);
+}
+
 export function ok<T>(
   data: T,
-  init: { maxAge?: number; headers?: HeadersInit } = {},
+  init: { maxAge?: number; headers?: HeadersInit; request?: Request } = {},
 ): Response {
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json; charset=utf-8");
@@ -34,8 +46,15 @@ export function ok<T>(
     "cache-control",
     init.maxAge ? `private, max-age=${init.maxAge}` : NO_STORE,
   );
+  headers.set("vary", "accept-encoding");
   const body: ApiSuccess<T> = { data };
-  return new Response(JSON.stringify(body), { status: 200, headers });
+  const json = JSON.stringify(body);
+  if (json.length >= GZIP_MIN_BYTES && acceptsGzip(init.request)) {
+    headers.set("content-encoding", "gzip");
+    const stream = new Blob([json]).stream().pipeThrough(new CompressionStream("gzip"));
+    return new Response(stream, { status: 200, headers });
+  }
+  return new Response(json, { status: 200, headers });
 }
 
 export function fail(status: number, error: ApiError, headers?: HeadersInit): Response {

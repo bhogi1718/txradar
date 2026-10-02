@@ -23,7 +23,11 @@ export async function GET(request: NextRequest) {
       fetchedAt: new Date().toISOString(),
     }));
     const body: PriceHistoryResponse = { chain, ...value, cached: hit };
-    return ok(body, { maxAge: 3600, headers: { "x-cache": hit ? "HIT" : "MISS" } });
+    return ok(body, {
+      request,
+      maxAge: 3600,
+      headers: { "x-cache": hit ? "HIT" : "MISS" },
+    });
   } catch (err) {
     return handleError(err);
   }

@@ -10,7 +10,7 @@ type CachedResult = { prices: PriceMap; fetchedAt: string };
 
 const cache = sharedCache<CachedResult>("prices", { maxEntries: 4 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { value, hit } = await cache.getOrLoad("all", TTL_MS, async () => ({
       prices: await getPriceClient().fetchPrices(),
@@ -18,7 +18,11 @@ export async function GET() {
     }));
 
     const body: PricesResponse = { ...value, cached: hit };
-    return ok(body, { maxAge: 30, headers: { "x-cache": hit ? "HIT" : "MISS" } });
+    return ok(body, {
+      request,
+      maxAge: 30,
+      headers: { "x-cache": hit ? "HIT" : "MISS" },
+    });
   } catch (err) {
     return handleError(err);
   }
