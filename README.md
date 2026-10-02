@@ -1,12 +1,39 @@
 # TxRadar
 
+[![CI](https://github.com/bhogi1718/txradar/actions/workflows/ci.yml/badge.svg)](https://github.com/bhogi1718/txradar/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-teal.svg)](LICENSE)
+![Next.js 16](https://img.shields.io/badge/Next.js-16-black)
+![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6)
+![Tests](https://img.shields.io/badge/tests-309%20unit%20%2B%2027%20e2e-2ea44f)
+![WCAG 2.1 AA](https://img.shields.io/badge/a11y-WCAG%202.1%20AA-6f42c1)
+
 A local-first crypto transaction tracker for Bitcoin, Ethereum and Tron. Paste a wallet
 address and see its inflows, outflows, counterparties, tokens and exchange exposure —
 no signup, no deployment, no paid services.
 
-This is a from-scratch rebuild of an earlier vanilla HTML/JS prototype (kept at
-[`../testcrypto`](../testcrypto) for reference), replacing client-exposed API keys and
-unreliable data sources with a proper Next.js app.
+![TxRadar wallet view](docs/screenshots/wallet-dark.jpg)
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/home-dark.jpg" alt="Home with chain auto-detecting search" /></td>
+    <td><img src="docs/screenshots/inspector-dark.jpg" alt="Counterparty inspector with drill-down" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Search detects the chain from the address</sub></td>
+    <td align="center"><sub>Follow the money through counterparties</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/panels-dark.jpg" alt="Counterparties, known entities and tokens panels" /></td>
+    <td><img src="docs/screenshots/wallet-light.jpg" alt="Wallet view in the light theme" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Counterparties, verified entities, tokens</sub></td>
+    <td align="center"><sub>Light theme</sub></td>
+  </tr>
+</table>
+
+This is a from-scratch rebuild of an earlier vanilla HTML/JS prototype, replacing
+client-exposed API keys and unreliable data sources with a proper Next.js app.
 
 ## Features
 
@@ -18,8 +45,12 @@ unreliable data sources with a proper Next.js app.
   address, method, token or entity name. Filters live in the URL, so views are shareable.
 - **Deeper history** — "Load older" pages back through each explorer's full history.
 - **Known entities** — verified exchange and contract labels, exchange share of volume.
-- **Tokens** — TRC-20 transfers on Tron, priced where a market exists; unpriced tokens
-  are flagged as unverified (usually spam airdrops).
+- **Tokens** — ERC-20 on Ethereum and TRC-20 on Tron, priced where a market exists.
+  Tokens missing from CoinGecko's token lists (airdropped spam) are hidden by default, and
+  amounts worth more than 1% of a token's market cap are marked illiquid rather than shown
+  as real money.
+- **Complete Ethereum flows** — internal transactions included, so ETH paid out by
+  contracts (exchange withdrawals, DEX returns, refunds) counts toward "Received".
 - **Follow the money** — open any counterparty, see your relationship and their own
   activity, and drill up to five hops deep. The path is part of the URL.
 - **CSV export** — the filtered, sorted rows, safe to open in Excel.
@@ -108,6 +139,7 @@ Key decisions:
 | `npm run test:coverage` | Vitest with coverage                                       |
 | `npm run e2e`           | End-to-end + accessibility tests (Playwright; build first) |
 | `npm run format`        | Format with Prettier                                       |
+| `npm run screenshots`   | Regenerate README screenshots from a running app           |
 | `npm run check`         | lint + typecheck + format check + unit tests               |
 
 A pre-commit hook (Husky + lint-staged) runs ESLint and Prettier on staged files.
@@ -172,10 +204,16 @@ All six planned phases are complete:
 - ✅ Phase 5 — Counterparty inspector with drill-down, top counterparties, CSV export
 - ✅ Phase 6 — Hardening (cursor pagination, error boundaries, light theme, a11y,
   Playwright e2e)
+- ✅ Polish — ERC-20 + internal transactions, spam and liquidity checks, dependency and
+  CI upkeep, screenshots, license
 
-Known limits: ERC-20 token transfers on Ethereum aren't fetched yet (TRC-20 on Tron is);
-the label set is deliberately small; TRC-10 token amounts are shown in raw units because
-TronGrid doesn't report their decimals.
+Known limits: the label set is deliberately small; TRC-10 token amounts are shown in raw
+units because TronGrid doesn't report their decimals; token USD values use today's price
+(CoinGecko's keyless tier has no per-day token history).
+
+## License
+
+[MIT](LICENSE)
 
 ## Notes
 
