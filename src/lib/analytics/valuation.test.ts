@@ -62,6 +62,7 @@ describe("valueTx", () => {
     ).toEqual({
       usd: 10,
       basis: "current",
+      illiquid: false,
     });
     expect(valueTx(tx, { tokens: { prices: {}, unpriced: [] } })).toBeNull();
   });
@@ -102,5 +103,34 @@ describe("summarizeUsd", () => {
     );
     const s = summarizeUsd([old], { history: SERIES });
     expect(s).toMatchObject({ basis: null, unpriced: 1, inflow: 0 });
+  });
+});
+
+describe("illiquid token valuations", () => {
+  const ZC = {
+    symbol: "ZC",
+    contract: "0x4e67db19044549ff420860834c91b45bad298722",
+    decimals: 18,
+  };
+  const tokens = {
+    prices: { [ZC.contract]: 0.015 },
+    unpriced: [],
+    marketCaps: { [ZC.contract]: 13_700_000 },
+  };
+
+  it("flags an amount worth more than 1% of the market cap (a big airdrop)", () => {
+    const v = valueTx(makeTx({ asset: ZC, value: 40_000_000 }), { tokens });
+    expect(v?.usd).toBeCloseTo(600_000, 0);
+    expect(v?.illiquid).toBe(true);
+  });
+
+  it("doesn't flag ordinary amounts, or tokens without a known cap", () => {
+    expect(valueTx(makeTx({ asset: ZC, value: 1_000 }), { tokens })?.illiquid).toBe(
+      false,
+    );
+    const noCap = { prices: tokens.prices, unpriced: [] };
+    expect(
+      valueTx(makeTx({ asset: ZC, value: 40_000_000 }), { tokens: noCap })?.illiquid,
+    ).toBe(false);
   });
 });

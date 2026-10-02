@@ -1,7 +1,8 @@
 import { TriangleAlert } from "lucide-react";
 
 import { truncateAddress } from "@/lib/chains/address";
-import type { TokenSummary } from "@/lib/analytics/tokens";
+import { ILLIQUID_SHARE } from "@/lib/analytics/valuation";
+import { isIlliquid, type TokenSummary } from "@/lib/analytics/tokens";
 import { formatAmount, formatCount, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -67,11 +68,21 @@ export function TokensPanel({
                     {formatAmount(net, { signed: true })}
                   </span>
                   <span className="block mono-data text-[11px] text-muted-foreground">
-                    {t.price !== null
-                      ? formatUsd(net * t.price, { signed: true })
-                      : t.priceStatus === "unpriced"
-                        ? "no price"
-                        : "price unavailable"}
+                    {t.price !== null && isIlliquid(t) ? (
+                      <span
+                        className="text-chain-btc"
+                        title={`Worth more than ${ILLIQUID_SHARE * 100}% of this token's whole market cap — it couldn't be sold anywhere near this price.`}
+                      >
+                        illiquid ·{" "}
+                        {formatUsd(net * t.price, { signed: true, compact: true })}
+                      </span>
+                    ) : t.price !== null ? (
+                      formatUsd(net * t.price, { signed: true })
+                    ) : t.priceStatus === "unpriced" ? (
+                      "no price"
+                    ) : (
+                      "price unavailable"
+                    )}
                   </span>
                 </span>
               </button>

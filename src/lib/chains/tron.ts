@@ -9,6 +9,7 @@ import {
   type FetchTransactionsOptions,
 } from "./adapter";
 import { fetchJson } from "./http";
+import { mergeTokenTransfers } from "./merge";
 import { tronHexToBase58 } from "./tron-address";
 import { fromBaseUnits } from "./units";
 
@@ -227,33 +228,8 @@ export function normalizeTrc20Transfer(t: Trc20Transfer, wallet: string): Transa
   };
 }
 
-/**
- * Sending a token is a TriggerSmartContract call to the token contract: the
- * native list shows it as a value-0 contract call, the TRC-20 list shows the
- * real amount. Collapse each pair into one token row that keeps the native
- * row's fee and block height, so the table shows the transfer once.
- */
-export function mergeTokenTransfers(
-  native: readonly Transaction[],
-  tokens: readonly Transaction[],
-): Transaction[] {
-  const byHash = new Map(native.map((tx) => [tx.hash, tx]));
-  const absorbed = new Set<string>();
-
-  const enriched = tokens.map((token) => {
-    const call = byHash.get(token.hash);
-    if (!call || call.category !== "contract-call" || call.value !== 0) return token;
-    absorbed.add(call.hash);
-    return {
-      ...token,
-      fee: call.fee,
-      blockHeight: call.blockHeight,
-      status: call.status,
-    };
-  });
-
-  return [...native.filter((tx) => !absorbed.has(tx.hash)), ...enriched];
-}
+// Merging token rows into their contract-call rows lives in ./merge (shared with Ethereum).
+export { mergeTokenTransfers } from "./merge";
 
 // --- Adapter --------------------------------------------------------------
 

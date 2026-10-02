@@ -27,7 +27,19 @@ export function priceAt(series: DailyPrices, ts: number): number | null {
 
 export type PriceBasis = "historical" | "current";
 
-export type Valuation = { usd: number; basis: PriceBasis };
+export type Valuation = {
+  usd: number;
+  basis: PriceBasis;
+  /**
+   * True when the amount is worth more than ILLIQUID_SHARE of the token's
+   * whole market cap: the spot price says nothing about what it could
+   * actually be sold for (typical of large airdrops).
+   */
+  illiquid?: boolean;
+};
+
+/** Above this share of market cap, a spot-price valuation isn't realistic. */
+export const ILLIQUID_SHARE = 0.01;
 
 export type PricingContext = {
   /** Daily native-coin closes, for "price on the day". */
@@ -53,8 +65,16 @@ export function valueAmount(
     if (ctx.current !== undefined) return { usd: amount * ctx.current, basis: "current" };
     return null;
   }
-  const p = ctx.tokens?.prices[tx.asset.contract!];
-  return p === undefined ? null : { usd: amount * p, basis: "current" };
+  const contract = tx.asset.contract!;
+  const p = ctx.tokens?.prices[contract];
+  if (p === undefined) return null;
+  const usd = amount * p;
+  const cap = ctx.tokens?.marketCaps?.[contract];
+  return {
+    usd,
+    basis: "current",
+    illiquid: cap !== undefined && usd > cap * ILLIQUID_SHARE,
+  };
 }
 
 /** USD value of what the tx moved (0 for failed). */

@@ -1,5 +1,7 @@
 import { isValidAddress } from "@/lib/chains/address";
 import type { TokenPricing } from "@/lib/prices/coingecko";
+
+import { ILLIQUID_SHARE } from "./valuation";
 import { isNative, type Asset, type Transaction } from "@/lib/schemas/transaction";
 
 export type TokenSummary = {
@@ -9,6 +11,8 @@ export type TokenSummary = {
   count: number;
   /** Current USD price, when known. */
   price: number | null;
+  /** Market cap, when CoinGecko reports one. */
+  marketCap: number | null;
   /**
    * priced:      CoinGecko has a price
    * unpriced:    CoinGecko has no market for it — likely spam
@@ -39,11 +43,14 @@ export function summarizeTokens(
         outflow: 0,
         count: 0,
         price: pricing?.prices[contract] ?? null,
+        marketCap: pricing?.marketCaps?.[contract] ?? null,
         priceStatus:
           pricing?.prices[contract] !== undefined
             ? "priced"
-            : // No real contract (TRC-10 id) means no market to price it on.
-              !isValidAddress(tx.chain, contract) || pricing?.unpriced.includes(contract)
+            : // No real contract (TRC-10 id) or not a listed token: no market to price.
+              tx.asset.listed === false ||
+                !isValidAddress(tx.chain, contract) ||
+                pricing?.unpriced.includes(contract)
               ? "unpriced"
               : "unavailable",
         lastSeen: tx.timestamp,
@@ -65,10 +72,23 @@ export function summarizeTokens(
 export function tokenContracts(txs: readonly Transaction[]): string[] {
   const counts = new Map<string, number>();
   for (const t of txs) {
-    if (isNative(t) || !isValidAddress(t.chain, t.asset.contract!)) continue;
+    // Unlisted tokens are almost always spam: don't spend price lookups on them.
+    if (
+      isNative(t) ||
+      t.asset.listed === false ||
+      !isValidAddress(t.chain, t.asset.contract!)
+    ) {
+      continue;
+    }
     counts.set(t.asset.contract!, (counts.get(t.asset.contract!) ?? 0) + 1);
   }
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([c]) => c);
+}
+
+/** Net position worth more than ILLIQUID_SHARE of the token's market cap. */
+export function isIlliquid(t: TokenSummary): boolean {
+  if (t.price === null || t.marketCap === null) return false;
+  return Math.abs(t.inflow - t.outflow) * t.price > t.marketCap * ILLIQUID_SHARE;
 }

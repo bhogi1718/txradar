@@ -101,6 +101,7 @@ const CATEGORY_LABEL: Record<TxCategory, string> = {
   "contract-call": "Contract call",
   "contract-creation": "Deploy contract",
   "token-transfer": "Token transfer",
+  "internal-transfer": "Internal transfer",
 };
 
 function signed(tx: Transaction): number {
@@ -246,7 +247,8 @@ function buildColumns(
         // TRC-10 ids have no contract to price; otherwise trust the lookup.
         const unverified =
           token &&
-          (!isValidAddress(tx.chain, tx.asset.contract!) ||
+          (tx.asset.listed === false ||
+            !isValidAddress(tx.chain, tx.asset.contract!) ||
             (pricing.tokens?.unpriced.includes(tx.asset.contract!) ?? false));
         return (
           <span className="inline-flex items-baseline gap-1.5">
@@ -271,7 +273,9 @@ function buildColumns(
               )}
               title={
                 unverified
-                  ? `${tx.asset.contract} — no market price; possibly a spam token`
+                  ? tx.asset.listed === false
+                    ? `${tx.asset.contract} — not a recognized token; likely spam`
+                    : `${tx.asset.contract} — no market price; possibly a spam token`
                   : (tx.asset.contract ?? undefined)
               }
             >
@@ -291,11 +295,16 @@ function buildColumns(
         if (!v) return <span className="text-muted-foreground/60">—</span>;
         return (
           <span
-            className="mono-data text-[13px] text-muted-foreground"
+            className={cn(
+              "mono-data text-[13px] text-muted-foreground",
+              v.illiquid && "text-chain-btc line-through decoration-1",
+            )}
             title={
-              v.basis === "historical"
-                ? `At the ${formatDate(tx.timestamp)} price`
-                : "At today's price"
+              v.illiquid
+                ? "Worth more than 1% of this token's market cap — not a realistic value"
+                : v.basis === "historical"
+                  ? `At the ${formatDate(tx.timestamp)} price`
+                  : "At today's price"
             }
           >
             {formatUsd(v.usd)}

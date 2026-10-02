@@ -74,6 +74,19 @@ export const defaultHistories = (): Record<string, History> => ({
         status: "failed",
         fee: 0.001,
       }),
+      // Airdropped spam: not on the token list, hidden unless ?unlisted=show.
+      tx({
+        direction: "in",
+        from: "0x00000000000000000000000000000000000000dd",
+        asset: {
+          symbol: "FREE-AIRDROP",
+          contract: "0x00000000000000000000000000000000000000ee",
+          decimals: 18,
+          listed: false,
+        },
+        category: "token-transfer",
+        value: 1_000_000,
+      }),
     ],
     [tx({ direction: "in", from: PEER, value: 0.5, timestamp: NOW - 400 * DAY })],
   ],

@@ -5,11 +5,12 @@ import { handleError, ok, parseQuery } from "@/lib/api/response";
 import { sharedCache } from "@/lib/cache";
 import { isUpstreamError } from "@/lib/chains/errors";
 import { getPriceClient, type TokenPricing } from "@/lib/prices";
+import type { TokenQuote } from "@/lib/prices/coingecko";
 
 const TTL_MS = 5 * 60 * 1000;
 
-/** Per-contract answers: a price, or null for "CoinGecko has no price". */
-const cache = sharedCache<number | null>("token-prices", { maxEntries: 1000 });
+/** Per-contract answers: a quote, or null for "CoinGecko has no price". */
+const cache = sharedCache<TokenQuote | null>("token-prices", { maxEntries: 1000 });
 
 /**
  * The keyless CoinGecko tier prices one contract per request, so contracts
@@ -22,7 +23,8 @@ export async function GET(request: NextRequest) {
   if (!query.ok) return query.response;
   const { chain, contracts } = query.value;
 
-  const pricing: TokenPricing = { prices: {}, unpriced: [] };
+  const marketCaps: Record<string, number> = {};
+  const pricing: TokenPricing = { prices: {}, unpriced: [], marketCaps };
   let firstError: unknown = null;
 
   try {
@@ -31,8 +33,12 @@ export async function GET(request: NextRequest) {
         const { value } = await cache.getOrLoad(`${chain}:${contract}`, TTL_MS, () =>
           getPriceClient().fetchTokenPrice(chain, contract),
         );
-        if (value === null) pricing.unpriced.push(contract);
-        else pricing.prices[contract] = value;
+        if (value === null) {
+          pricing.unpriced.push(contract);
+        } else {
+          pricing.prices[contract] = value.usd;
+          if (value.marketCap !== null) marketCaps[contract] = value.marketCap;
+        }
       } catch (err) {
         firstError ??= err;
         if (isUpstreamError(err) && err.code === "RATE_LIMITED") break;

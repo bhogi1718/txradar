@@ -116,7 +116,8 @@ describe("coingecko history and token prices", () => {
     expect(url.searchParams.get("contract_addresses")).toBe(
       "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     );
-    expect(price).toBe(1.0001); // matched despite CoinGecko lowercasing the key
+    // matched despite CoinGecko lowercasing the key; no cap reported → null
+    expect(price).toEqual({ usd: 1.0001, marketCap: null });
   });
 
   it("returns null when CoinGecko has no price for the contract", async () => {
@@ -127,5 +128,17 @@ describe("coingecko history and token prices", () => {
         "THxYWbzAgzQgQaYi9G4mjeL1tq1hdrZe55",
       ),
     ).resolves.toBeNull();
+  });
+
+  it("returns the market cap alongside the price when reported", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ "0xabc": { usd: 0.015, usd_market_cap: 13_698_718 } }),
+    );
+    await expect(
+      createCoinGeckoClient(undefined).fetchTokenPrice("ethereum", "0xabc"),
+    ).resolves.toEqual({ usd: 0.015, marketCap: 13_698_718 });
+    expect(
+      new URL(String(fetchMock.mock.calls[0]![0])).searchParams.get("include_market_cap"),
+    ).toBe("true");
   });
 });
