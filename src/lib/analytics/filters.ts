@@ -7,6 +7,7 @@ import { counterpartyOf } from "./summary";
 
 export const DIRECTION_FILTERS = ["all", "in", "out", "self"] as const;
 export const RANGE_PRESETS = ["24h", "7d", "30d", "90d", "1y", "all"] as const;
+export const TRAIL_MAX = 5;
 
 export type DirectionFilter = (typeof DIRECTION_FILTERS)[number];
 export type RangePreset = (typeof RANGE_PRESETS)[number];
@@ -37,6 +38,20 @@ export const filterParamsSchema = z.object({
     .enum(["1", "0"])
     .catch("0")
     .transform((v) => v === "1"),
+  /**
+   * Counterparty drill-down path, outermost first (wallet → A → B). Capped
+   * at TRAIL_MAX hops; addresses are validated against the chain where used.
+   */
+  trail: z
+    .string()
+    .catch("")
+    .transform((s) =>
+      s
+        .split(",")
+        .map((a) => a.trim())
+        .filter((a) => a.length > 0 && a.length <= 128)
+        .slice(0, TRAIL_MAX),
+    ),
 });
 
 export type TxFilters = z.infer<typeof filterParamsSchema>;
@@ -49,6 +64,7 @@ export function parseFilterParams(params: URLSearchParams): TxFilters {
     range: params.get("range") ?? undefined,
     q: params.get("q") ?? undefined,
     hideFailed: params.get("hideFailed") ?? undefined,
+    trail: params.get("trail") ?? undefined,
   });
 }
 
@@ -59,6 +75,7 @@ export function serializeFilters(filters: TxFilters): URLSearchParams {
   if (filters.range !== "all") p.set("range", filters.range);
   if (filters.q) p.set("q", filters.q);
   if (filters.hideFailed) p.set("hideFailed", "1");
+  if (filters.trail.length > 0) p.set("trail", filters.trail.join(","));
   return p;
 }
 

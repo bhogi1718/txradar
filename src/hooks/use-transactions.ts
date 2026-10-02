@@ -12,8 +12,13 @@ import type { Chain } from "@/lib/schemas/chain";
 export const transactionsQueryKey = (chain: Chain, address: string) =>
   ["transactions", chain, address] as const;
 
-export function useTransactions(chain: Chain, address: string) {
+export function useTransactions(
+  chain: Chain,
+  address: string,
+  options: { enabled?: boolean } = {},
+) {
   return useQuery<TransactionsResponse, Error>({
+    enabled: options.enabled ?? true,
     queryKey: transactionsQueryKey(chain, address),
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ chain, address });

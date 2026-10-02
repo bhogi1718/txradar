@@ -6,6 +6,7 @@ import {
   filterByRange,
   parseFilterParams,
   serializeFilters,
+  type TxFilters,
 } from "./filters";
 
 const NOW = Date.UTC(2026, 8, 19, 12);
@@ -15,7 +16,7 @@ describe("filter params", () => {
   it("parses valid params", () => {
     expect(
       parseFilterParams(new URLSearchParams("dir=out&range=30d&q=0xabc&hideFailed=1")),
-    ).toEqual({ dir: "out", range: "30d", q: "0xabc", hideFailed: true });
+    ).toEqual({ dir: "out", range: "30d", q: "0xabc", hideFailed: true, trail: [] });
   });
 
   it("falls back to defaults for garbage instead of throwing", () => {
@@ -26,8 +27,25 @@ describe("filter params", () => {
 
   it("serializes only non-defaults and round-trips", () => {
     expect(serializeFilters(DEFAULT_FILTERS).toString()).toBe("");
-    const f = { dir: "in", range: "7d", q: "abc", hideFailed: true } as const;
+    const f: TxFilters = {
+      dir: "in",
+      range: "7d",
+      q: "abc",
+      hideFailed: true,
+      trail: ["0xa", "0xb"],
+    };
     expect(parseFilterParams(serializeFilters(f))).toEqual(f);
+  });
+
+  it("caps the drill-down trail and drops empty hops", () => {
+    const trail = "a,,b, c ,d,e,f,g";
+    expect(parseFilterParams(new URLSearchParams({ trail })).trail).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+    ]);
   });
 });
 
