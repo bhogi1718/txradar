@@ -31,8 +31,6 @@ import { CHAIN_META, type Chain } from "@/lib/schemas/chain";
 import { isNative, type Transaction } from "@/lib/schemas/transaction";
 import { cn } from "@/lib/utils";
 
-const EMPTY: Transaction[] = [];
-
 type InspectorProps = {
   chain: Chain;
   /** The wallet the page is about. */
@@ -87,8 +85,8 @@ function InspectorBody({
     enabled: autoScan || scanRequested,
   });
 
-  const parentTxs = parentQuery.data?.transactions ?? EMPTY;
-  const ownTxs = ownQuery.data?.transactions ?? EMPTY;
+  const parentTxs = parentQuery.transactions;
+  const ownTxs = ownQuery.transactions;
 
   const between = useMemo(
     () => transactionsWith(parentTxs, current),

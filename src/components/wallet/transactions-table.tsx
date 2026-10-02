@@ -351,6 +351,7 @@ export function TransactionsTable({
   empty,
   onOpenCounterparty,
   onExport,
+  footerExtra,
 }: {
   data: Transaction[];
   chain: Chain;
@@ -360,6 +361,8 @@ export function TransactionsTable({
   onOpenCounterparty?: (address: string) => void;
   /** Export the filtered rows, in the table's current sort order. */
   onExport?: (rows: Transaction[]) => void;
+  /** Extra footer controls, e.g. "Load older". */
+  footerExtra?: ReactNode;
   /** Rendered in place of rows when `data` is empty. */
   empty?: ReactNode;
 }) {
@@ -498,6 +501,7 @@ export function TransactionsTable({
                   <Download className="size-3.5" /> Export CSV
                 </button>
               )}
+              {footerExtra}
             </div>
             <div className="flex items-center gap-3">
               <Segmented

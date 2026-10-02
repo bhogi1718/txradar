@@ -2,10 +2,11 @@ import { NextRequest } from "next/server";
 
 import { sharedCache } from "@/lib/cache";
 import { UpstreamError } from "@/lib/chains/errors";
+import type { TransactionPage } from "@/lib/chains/adapter";
 import type { Transaction } from "@/lib/schemas/transaction";
 
 const fetchTransactions =
-  vi.fn<(address: string, opts?: unknown) => Promise<Transaction[]>>();
+  vi.fn<(address: string, opts?: unknown) => Promise<TransactionPage>>();
 
 vi.mock("@/lib/chains", () => ({
   getAdapter: vi.fn(() => ({ chain: "ethereum", fetchTransactions })),
@@ -69,7 +70,7 @@ describe("GET /api/transactions", () => {
   });
 
   it("normalizes the address and returns the envelope", async () => {
-    fetchTransactions.mockResolvedValue([sample]);
+    fetchTransactions.mockResolvedValue({ transactions: [sample], nextCursor: null });
     const res = await GET(req(`chain=ethereum&address=${ETH}`));
 
     expect(res.status).toBe(200);
@@ -89,7 +90,7 @@ describe("GET /api/transactions", () => {
   });
 
   it("serves the second identical request from cache", async () => {
-    fetchTransactions.mockResolvedValue([sample]);
+    fetchTransactions.mockResolvedValue({ transactions: [sample], nextCursor: null });
     await GET(req(`chain=ethereum&address=${ETH}`));
     const res = await GET(req(`chain=ethereum&address=${ETH.toLowerCase()}`));
 
@@ -106,9 +107,37 @@ describe("GET /api/transactions", () => {
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("3");
 
-    fetchTransactions.mockResolvedValueOnce([sample]);
+    fetchTransactions.mockResolvedValueOnce({ transactions: [sample], nextCursor: null });
     const retry = await GET(req(`chain=ethereum&address=${ETH}`));
     expect(retry.status).toBe(200);
     expect(retry.headers.get("x-cache")).toBe("MISS");
+  });
+
+  it("passes the cursor through, returns nextCursor, and caches each page separately", async () => {
+    fetchTransactions.mockImplementation(async (_addr, opts) => {
+      const cursor = (opts as { cursor?: string }).cursor;
+      return cursor === "2"
+        ? { transactions: [{ ...sample, hash: "0xolder" }], nextCursor: null }
+        : { transactions: [sample], nextCursor: "2" };
+    });
+
+    const first = await (await GET(req(`chain=ethereum&address=${ETH}`))).json();
+    expect(first.data.nextCursor).toBe("2");
+
+    const second = await (
+      await GET(req(`chain=ethereum&address=${ETH}&cursor=2`))
+    ).json();
+    expect(second.data.transactions[0].hash).toBe("0xolder");
+    expect(second.data.nextCursor).toBeNull();
+    expect(fetchTransactions).toHaveBeenLastCalledWith(ETH.toLowerCase(), {
+      limit: 500,
+      cursor: "2",
+      revalidate: 0,
+    });
+
+    // first page is still a cache hit
+    const again = await GET(req(`chain=ethereum&address=${ETH}`));
+    expect(again.headers.get("x-cache")).toBe("HIT");
+    expect(fetchTransactions).toHaveBeenCalledTimes(2);
   });
 });

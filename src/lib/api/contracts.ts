@@ -29,6 +29,8 @@ export const transactionsQuerySchema = z
       .min(1)
       .max(TRANSACTIONS_MAX_LIMIT)
       .default(TRANSACTIONS_DEFAULT_LIMIT),
+    /** Opaque, adapter-specific; echoed back from a previous page. */
+    cursor: z.string().max(2000).optional(),
   })
   .superRefine((q, ctx) => {
     if (!isValidAddress(q.chain, q.address)) {
@@ -47,6 +49,8 @@ export const transactionsResponseSchema = z.object({
   chain: chainSchema,
   address: z.string(),
   transactions: transactionListSchema,
+  /** Pass as `cursor` for the next (older) page; null when history is exhausted. */
+  nextCursor: z.string().nullable(),
   /** ISO timestamp of when the upstream was actually queried. */
   fetchedAt: z.string(),
   /** True when served from the server-side cache. */

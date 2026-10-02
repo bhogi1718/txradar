@@ -54,13 +54,15 @@ describe("tron adapter", () => {
   });
 
   it("normalizes every fixture tx into the Transaction schema", async () => {
-    const txs = await createTronAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createTronAdapter("KEY").fetchTransactions(WALLET);
     expect(txs).toHaveLength(fixture.data.length);
     for (const tx of txs) expect(transactionSchema.safeParse(tx).success).toBe(true);
   });
 
   it("decodes hex addresses to base58 and classifies an outbound TRX transfer", async () => {
-    const txs = await createTronAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createTronAdapter("KEY").fetchTransactions(WALLET);
     const tx = txs.find((t) => t.hash.startsWith("49ca73162b95"))!;
 
     expect(tx).toMatchObject({
@@ -79,7 +81,8 @@ describe("tron adapter", () => {
   });
 
   it("classifies an inbound TRX transfer with no fee attributed", async () => {
-    const txs = await createTronAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createTronAdapter("KEY").fetchTransactions(WALLET);
     const tx = txs.find((t) => t.hash.startsWith("b8ab75387e5b"))!;
 
     expect(tx).toMatchObject({ direction: "in", to: WALLET, fee: null });
@@ -88,7 +91,8 @@ describe("tron adapter", () => {
   });
 
   it("classifies a smart-contract call against the USDT contract", async () => {
-    const txs = await createTronAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createTronAdapter("KEY").fetchTransactions(WALLET);
     const tx = txs.find((t) => t.hash.startsWith("bab10a1da23e"))!;
 
     expect(tx).toMatchObject({
@@ -103,7 +107,8 @@ describe("tron adapter", () => {
   });
 
   it("models TRC-10 transfers as their own raw-unit asset", async () => {
-    const txs = await createTronAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createTronAdapter("KEY").fetchTransactions(WALLET);
     const tx = txs.find((t) => t.hash.startsWith("50650bb4bda2"))!;
 
     expect(tx).toMatchObject({
@@ -122,7 +127,9 @@ describe("tron adapter", () => {
     failed.data[0]!.ret = [{ contractRet: "OUT_OF_ENERGY", fee: 100000 }];
     fetchMock.mockImplementation(routeFetch(failed));
 
-    const [tx] = await createTronAdapter("KEY").fetchTransactions(WALLET);
+    const {
+      transactions: [tx],
+    } = await createTronAdapter("KEY").fetchTransactions(WALLET);
     expect(tx).toMatchObject({ status: "failed", value: 0 });
   });
 
@@ -132,7 +139,9 @@ describe("tron adapter", () => {
     odd.data[0]!.raw_data.contract[0]!.type = "FreezeBalanceV2Contract";
     fetchMock.mockImplementation(routeFetch(odd));
 
-    const [tx] = await createTronAdapter("KEY").fetchTransactions(WALLET);
+    const {
+      transactions: [tx],
+    } = await createTronAdapter("KEY").fetchTransactions(WALLET);
     expect(tx).toMatchObject({ category: "contract-call", value: 0, direction: "out" });
   });
 
@@ -146,7 +155,8 @@ describe("tron adapter", () => {
 
     it("collapses a USDT send into one token row that keeps the native fee", async () => {
       fetchMock.mockImplementation(routeFetch(fixture, trc20Fixture));
-      const txs = await createTronAdapter("KEY").fetchTransactions(WALLET);
+      const { transactions: txs } =
+        await createTronAdapter("KEY").fetchTransactions(WALLET);
       const rows = txs.filter((t) => t.hash.startsWith("bab10a1da23e"));
 
       expect(rows).toHaveLength(1);
@@ -163,7 +173,8 @@ describe("tron adapter", () => {
 
     it("adds incoming token transfers that have no native row, with no fee", async () => {
       fetchMock.mockImplementation(routeFetch(fixture, trc20Fixture));
-      const txs = await createTronAdapter("KEY").fetchTransactions(WALLET);
+      const { transactions: txs } =
+        await createTronAdapter("KEY").fetchTransactions(WALLET);
       const tx = txs.find((t) => t.hash.startsWith("34459841ec72"))!;
       expect(tx).toMatchObject({
         direction: "in",
@@ -179,7 +190,8 @@ describe("tron adapter", () => {
         if (String(input).includes("/trc20")) return new Response("{}", { status: 500 });
         return jsonResponse(fixture);
       });
-      const txs = await createTronAdapter("KEY").fetchTransactions(WALLET);
+      const { transactions: txs } =
+        await createTronAdapter("KEY").fetchTransactions(WALLET);
       expect(txs).toHaveLength(fixture.data.length);
     });
 

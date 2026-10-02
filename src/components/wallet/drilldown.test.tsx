@@ -43,6 +43,7 @@ beforeEach(() => {
         chain: "ethereum",
         address,
         transactions: histories[address] ?? [],
+        nextCursor: null,
         fetchedAt: new Date().toISOString(),
         cached: false,
       },
