@@ -10,24 +10,26 @@ const TTL_MS = 5 * 60 * 1000;
 
 type CachedResult = {
   transactions: TransactionsResponse["transactions"];
+  nextCursor: string | null;
   fetchedAt: string;
 };
 
-const cache = sharedCache<CachedResult>("transactions", { maxEntries: 200 });
+const cache = sharedCache<CachedResult>("transactions", { maxEntries: 500 });
 
 export async function GET(request: NextRequest) {
   const query = parseQuery(request.nextUrl.searchParams, transactionsQuerySchema);
   if (!query.ok) return query.response;
 
-  const { chain, address, limit } = query.value;
-  const key = `${chain}:${address}:${limit}`;
+  const { chain, address, limit, cursor } = query.value;
+  const key = `${chain}:${address}:${limit}:${cursor ?? ""}`;
 
   try {
     const { value, hit } = await cache.getOrLoad(key, TTL_MS, async () => ({
-      transactions: await getAdapter(chain).fetchTransactions(address, {
+      ...(await getAdapter(chain).fetchTransactions(address, {
         limit,
+        cursor,
         revalidate: 0,
-      }),
+      })),
       fetchedAt: new Date().toISOString(),
     }));
 

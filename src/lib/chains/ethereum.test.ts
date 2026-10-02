@@ -63,7 +63,8 @@ describe("ethereum adapter", () => {
   });
 
   it("normalizes every fixture tx into the Transaction schema", async () => {
-    const txs = await createEthereumAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createEthereumAdapter("KEY").fetchTransactions(WALLET);
 
     expect(txs).toHaveLength(fixture.result.length);
     for (const tx of txs) expect(transactionSchema.safeParse(tx).success).toBe(true);
@@ -73,7 +74,8 @@ describe("ethereum adapter", () => {
   });
 
   it("classifies a plain inbound transfer", async () => {
-    const txs = await createEthereumAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createEthereumAdapter("KEY").fetchTransactions(WALLET);
     const tx = txs.find((t) => t.hash.startsWith("0xd81ea91807"))!;
 
     expect(tx).toMatchObject({
@@ -93,7 +95,8 @@ describe("ethereum adapter", () => {
   });
 
   it("classifies an outbound contract call with method name and fee", async () => {
-    const txs = await createEthereumAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createEthereumAdapter("KEY").fetchTransactions(WALLET);
     const tx = txs.find((t) => t.hash.startsWith("0xc9068313b1"))!;
     const raw = fixture.result.find((t) => t.hash === tx.hash)!;
 
@@ -110,7 +113,8 @@ describe("ethereum adapter", () => {
   });
 
   it("treats calldata sent to a wallet as a transfer with a memo, not a contract call", async () => {
-    const txs = await createEthereumAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createEthereumAdapter("KEY").fetchTransactions(WALLET);
     const tx = txs.find((t) => t.hash.startsWith("0xfd9dfbf103"))!;
     expect(tx).toMatchObject({
       direction: "in",
@@ -131,7 +135,8 @@ describe("ethereum adapter", () => {
 
   it("classifies incoming calldata as a contract call when the wallet is a contract", async () => {
     fetchMock.mockImplementation(routeFetch(() => "0x6080604052"));
-    const txs = await createEthereumAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createEthereumAdapter("KEY").fetchTransactions(WALLET);
     const tx = txs.find((t) => t.hash.startsWith("0xfd9dfbf103"))!;
     expect(tx.category).toBe("contract-call");
   });
@@ -143,12 +148,14 @@ describe("ethereum adapter", () => {
         throw new TypeError("fetch failed");
       return jsonResponse(fixture);
     });
-    const txs = await createEthereumAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createEthereumAdapter("KEY").fetchTransactions(WALLET);
     expect(txs).toHaveLength(fixture.result.length);
   });
 
   it("zeroes value on a failed tx but keeps it in the list", async () => {
-    const txs = await createEthereumAdapter("KEY").fetchTransactions(WALLET);
+    const { transactions: txs } =
+      await createEthereumAdapter("KEY").fetchTransactions(WALLET);
     const tx = txs.find((t) => t.hash.startsWith("0x42b6fe480a"))!;
     expect(tx.status).toBe("failed");
     expect(tx.value).toBe(0);
@@ -160,7 +167,7 @@ describe("ethereum adapter", () => {
       jsonResponse({ status: "0", message: "No transactions found", result: [] }),
     );
     await expect(createEthereumAdapter("KEY").fetchTransactions(WALLET)).resolves.toEqual(
-      [],
+      { transactions: [], nextCursor: null },
     );
   });
 

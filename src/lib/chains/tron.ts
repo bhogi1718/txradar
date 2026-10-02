@@ -85,7 +85,33 @@ const trc20TransferSchema = z.object({
 const trc20ResponseSchema = z.object({
   data: z.array(trc20TransferSchema),
   success: z.boolean(),
+  meta: z.object({ fingerprint: z.string().optional() }).passthrough().optional(),
 });
+
+/**
+ * TronGrid pages each list with its own `fingerprint`. The cursor carries
+ * both; a list whose fingerprint is null is exhausted and isn't re-fetched.
+ */
+type TronCursor = { native: string | null; trc20: string | null };
+
+const tronCursorSchema = z.object({
+  native: z.string().nullable(),
+  trc20: z.string().nullable(),
+});
+
+export function encodeTronCursor(c: TronCursor): string | null {
+  return c.native || c.trc20 ? JSON.stringify(c) : null;
+}
+
+export function decodeTronCursor(cursor: string | undefined): TronCursor | null {
+  if (!cursor) return null;
+  try {
+    const parsed = tronCursorSchema.safeParse(JSON.parse(cursor));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
 
 type Trc20Transfer = z.infer<typeof trc20TransferSchema>;
 
@@ -237,36 +263,56 @@ export function createTronAdapter(apiKey: string | undefined): ChainAdapter {
 
     async fetchTransactions(address: string, options: FetchTransactionsOptions = {}) {
       const limit = Math.min(options.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
-      const params = new URLSearchParams({
-        limit: String(limit),
-        order_by: "block_timestamp,desc",
-        only_confirmed: "true",
-      });
-
+      const cursor = decodeTronCursor(options.cursor);
       const base = `${BASE_URL}/accounts/${encodeURIComponent(address)}`;
       const common = {
         provider: PROVIDER,
         headers: apiKey ? { "TRON-PRO-API-KEY": apiKey } : undefined,
         revalidate: options.revalidate,
       };
+      const params = (fingerprint: string | null) => {
+        const p = new URLSearchParams({
+          limit: String(limit),
+          order_by: "block_timestamp,desc",
+          only_confirmed: "true",
+        });
+        if (fingerprint) p.set("fingerprint", fingerprint);
+        return p;
+      };
+
+      // First page: fetch both lists. Later pages: only lists with more to give.
+      const wantNative = !cursor || cursor.native !== null;
+      const wantTrc20 = !cursor || cursor.trc20 !== null;
 
       const [data, trc20] = await Promise.all([
-        fetchJson(`${base}/transactions?${params}`, {
-          ...common,
-          schema: tronGridResponseSchema,
-        }),
+        wantNative
+          ? fetchJson(`${base}/transactions?${params(cursor?.native ?? null)}`, {
+              ...common,
+              schema: tronGridResponseSchema,
+            })
+          : null,
         // Token history is enrichment: if it fails, still show native history.
-        fetchJson(`${base}/transactions/trc20?${params}`, {
-          ...common,
-          schema: trc20ResponseSchema,
-        }).catch(() => null),
+        wantTrc20
+          ? fetchJson(`${base}/transactions/trc20?${params(cursor?.trc20 ?? null)}`, {
+              ...common,
+              schema: trc20ResponseSchema,
+            }).catch(() => null)
+          : null,
       ]);
 
-      const native = data.data.map((tx) => normalizeTronGridTx(tx, address));
+      const native = data?.data.map((tx) => normalizeTronGridTx(tx, address)) ?? [];
       const tokens = trc20?.data.map((t) => normalizeTrc20Transfer(t, address)) ?? [];
-      return sortNewestFirst(
-        transactionListSchema.parse(mergeTokenTransfers(native, tokens)),
-      );
+
+      return {
+        transactions: sortNewestFirst(
+          transactionListSchema.parse(mergeTokenTransfers(native, tokens)),
+        ),
+        nextCursor: encodeTronCursor({
+          native: data?.meta.fingerprint ?? null,
+          // A failed token request ends token paging rather than retrying forever.
+          trc20: trc20?.meta?.fingerprint ?? null,
+        }),
+      };
     },
   };
 }

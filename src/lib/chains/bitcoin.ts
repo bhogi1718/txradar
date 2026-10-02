@@ -19,8 +19,10 @@ const PROVIDER = "esplora";
  * unreachable on some networks; override via ESPLORA_BASE_URL.
  */
 export const DEFAULT_ESPLORA_BASE_URL = "https://blockstream.info/api";
-/** Esplora returns up to 25 confirmed txs per page plus any in the mempool. */
-const PAGE_SIZE = 25;
+/** Esplora returns up to 25 confirmed txs per call (plus mempool on the first). */
+const ESPLORA_PAGE = 25;
+/** Esplora calls per TxRadar page: ~100 confirmed txs per "load". */
+const CALLS_PER_PAGE = 4;
 
 // --- Upstream shape -------------------------------------------------------
 
@@ -156,21 +158,43 @@ export function createBitcoinAdapter(
   baseUrl: string = DEFAULT_ESPLORA_BASE_URL,
 ): ChainAdapter {
   const root = baseUrl.replace(/\/+$/, "");
+
   return {
     chain: "bitcoin",
 
+    /**
+     * Esplora pages confirmed history 25 at a time via
+     * /address/:a/txs/chain/:last_seen_txid. One TxRadar page chains up to
+     * four of those calls; the cursor is the last confirmed txid seen.
+     */
     async fetchTransactions(address: string, options: FetchTransactionsOptions = {}) {
-      const data = await fetchJson(`${root}/address/${encodeURIComponent(address)}/txs`, {
-        provider: PROVIDER,
-        schema: esploraTxListSchema,
-        revalidate: options.revalidate,
-      });
+      const base = `${root}/address/${encodeURIComponent(address)}/txs`;
+      const raw: EsploraTx[] = [];
+      let lastSeen = options.cursor ?? null;
+      let exhausted = false;
 
-      const limit = options.limit ?? PAGE_SIZE;
-      const txs = data
-        .slice(0, Math.max(limit, PAGE_SIZE))
-        .map((tx) => normalizeEsploraTx(tx, address));
-      return sortNewestFirst(transactionListSchema.parse(txs));
+      for (let call = 0; call < CALLS_PER_PAGE; call++) {
+        const url = lastSeen ? `${base}/chain/${encodeURIComponent(lastSeen)}` : base;
+        const batch = await fetchJson(url, {
+          provider: PROVIDER,
+          schema: esploraTxListSchema,
+          revalidate: options.revalidate,
+        });
+        raw.push(...batch);
+
+        const confirmed = batch.filter((t) => t.status.confirmed);
+        if (confirmed.length < ESPLORA_PAGE) {
+          exhausted = true;
+          break;
+        }
+        lastSeen = confirmed[confirmed.length - 1]!.txid;
+      }
+
+      const txs = raw.map((tx) => normalizeEsploraTx(tx, address));
+      return {
+        transactions: sortNewestFirst(transactionListSchema.parse(txs)),
+        nextCursor: exhausted ? null : lastSeen,
+      };
     },
   };
 }

@@ -17,9 +17,12 @@ import { fromBaseUnits } from "./units";
 const PROVIDER = "etherscan";
 const BASE_URL = "https://api.etherscan.io/v2/api";
 const CHAIN_ID = 1;
-/** Etherscan's hard cap per page on the free tier. */
-const MAX_OFFSET = 10_000;
-const DEFAULT_LIMIT = 1_000;
+/**
+ * Etherscan caps page × offset at 10,000 rows per query, so a wallet's
+ * newest 10k transactions are reachable with page-based cursors.
+ */
+const MAX_WINDOW = 10_000;
+const DEFAULT_LIMIT = 500;
 
 // --- Upstream shape -------------------------------------------------------
 
@@ -174,6 +177,12 @@ export function addressesNeedingCodeCheck(
 
 // --- Adapter --------------------------------------------------------------
 
+/** Cursor = 1-based page number. Anything else starts from the newest page. */
+function parsePageCursor(cursor: string | undefined): number {
+  const n = Number(cursor);
+  return Number.isInteger(n) && n >= 1 ? n : 1;
+}
+
 export function createEthereumAdapter(apiKey: string | undefined): ChainAdapter {
   return {
     chain: "ethereum",
@@ -185,7 +194,8 @@ export function createEthereumAdapter(apiKey: string | undefined): ChainAdapter 
         });
       }
 
-      const limit = Math.min(options.limit ?? DEFAULT_LIMIT, MAX_OFFSET);
+      const limit = Math.min(options.limit ?? DEFAULT_LIMIT, MAX_WINDOW);
+      const page = parsePageCursor(options.cursor);
       const params = new URLSearchParams({
         chainid: String(CHAIN_ID),
         module: "account",
@@ -193,7 +203,7 @@ export function createEthereumAdapter(apiKey: string | undefined): ChainAdapter 
         address,
         startblock: "0",
         endblock: "latest",
-        page: "1",
+        page: String(page),
         offset: String(limit),
         sort: "desc",
         apikey: apiKey,
@@ -211,7 +221,7 @@ export function createEthereumAdapter(apiKey: string | undefined): ChainAdapter 
           /no transactions found/i.test(data.message) ||
           /no transactions found/i.test(data.result)
         ) {
-          return [];
+          return { transactions: [], nextCursor: null };
         }
         if (/rate limit/i.test(data.result)) {
           throw new UpstreamError("RATE_LIMITED", data.result, {
@@ -229,7 +239,13 @@ export function createEthereumAdapter(apiKey: string | undefined): ChainAdapter 
         apiKey,
       );
       const txs = data.result.map((tx) => normalizeEtherscanTx(tx, address, kinds));
-      return sortNewestFirst(transactionListSchema.parse(txs));
+      // A full page means there may be more, as long as the next page is
+      // still inside Etherscan's 10k-row window.
+      const more = data.result.length === limit && (page + 1) * limit <= MAX_WINDOW;
+      return {
+        transactions: sortNewestFirst(transactionListSchema.parse(txs)),
+        nextCursor: more ? String(page + 1) : null,
+      };
     },
   };
 }
