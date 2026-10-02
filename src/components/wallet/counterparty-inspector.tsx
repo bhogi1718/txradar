@@ -420,7 +420,7 @@ function TxList({ txs, chain }: { txs: Transaction[]; chain: Chain }) {
                 "inline-flex size-5 shrink-0 items-center justify-center rounded-full",
                 out ? "bg-outflow/10 text-outflow" : "bg-inflow/10 text-inflow",
               )}
-              aria-label={out ? "Outgoing" : "Incoming"}
+              aria-hidden="true"
             >
               {out ? (
                 <ArrowUpRight className="size-3" />
@@ -428,6 +428,8 @@ function TxList({ txs, chain }: { txs: Transaction[]; chain: Chain }) {
                 <ArrowDownLeft className="size-3" />
               )}
             </span>
+            {/* aria-label isn't allowed on a plain span; use real (hidden) text. */}
+            <span className="sr-only">{out ? "Outgoing" : "Incoming"}</span>
             <span
               className="text-muted-foreground"
               title={new Date(tx.timestamp).toISOString()}
