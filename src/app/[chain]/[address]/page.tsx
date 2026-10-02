@@ -56,7 +56,7 @@ export default async function WalletPage(props: PageProps<"/[chain]/[address]">)
   return (
     <>
       <SiteHeader showSearch />
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+      <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
         <WalletView
           // Remount on wallet change so filter state never leaks between wallets.
           key={`${chain}:${canonical}`}

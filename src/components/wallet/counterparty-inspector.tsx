@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { CopyButton } from "@/components/common/copy-button";
+import { SectionBoundary } from "@/components/common/section-boundary";
 import { EntityTag, entityKindLabel } from "@/components/common/entity-tag";
 import { RadarScope } from "@/components/common/radar-scope";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -57,7 +58,14 @@ export function CounterpartyInspector(props: InspectorProps) {
     <Sheet open={open} onOpenChange={(next) => !next && onTrailChange([])}>
       <SheetContent side="right" className="w-full! gap-0 p-0 sm:max-w-xl!">
         {/* Remount per hop so per-hop state (e.g. "scan anyway") resets. */}
-        {current && <InspectorBody key={current} {...props} current={current} />}
+        {current && (
+          <SectionBoundary
+            name="counterparty inspector"
+            className="m-4 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm"
+          >
+            <InspectorBody key={current} {...props} current={current} />
+          </SectionBoundary>
+        )}
       </SheetContent>
     </Sheet>
   );
