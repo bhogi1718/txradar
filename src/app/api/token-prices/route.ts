@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       pricing,
       fetchedAt: new Date().toISOString(),
     };
-    return ok(body, { maxAge: 60 });
+    return ok(body, { request, maxAge: 60 });
   } catch (err) {
     return handleError(err);
   }

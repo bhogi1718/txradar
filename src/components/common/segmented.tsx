@@ -100,7 +100,7 @@ export function Segmented<T extends string>({
               <span
                 className={cn(
                   "mono-data text-[11px]",
-                  active ? "text-primary" : "text-muted-foreground/70",
+                  active ? "text-primary" : "text-muted-foreground",
                 )}
               >
                 {opt.count}

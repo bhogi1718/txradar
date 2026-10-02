@@ -39,7 +39,11 @@ export async function GET(request: NextRequest) {
     });
 
     const body: TransactionsResponse = { chain, address, ...value, cached: hit };
-    return ok(body, { maxAge: 60, headers: { "x-cache": hit ? "HIT" : "MISS" } });
+    return ok(body, {
+      request,
+      maxAge: 60,
+      headers: { "x-cache": hit ? "HIT" : "MISS" },
+    });
   } catch (err) {
     return handleError(err);
   }

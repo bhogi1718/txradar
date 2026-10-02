@@ -24,7 +24,7 @@ describe("GET /api/prices", () => {
 
   it("returns the price map in the envelope", async () => {
     fetchPrices.mockResolvedValue(prices);
-    const res = await GET();
+    const res = await GET(new Request("http://x/api/prices"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.prices).toEqual(prices);
@@ -33,8 +33,8 @@ describe("GET /api/prices", () => {
 
   it("caches for subsequent calls", async () => {
     fetchPrices.mockResolvedValue(prices);
-    await GET();
-    const res = await GET();
+    await GET(new Request("http://x/api/prices"));
+    const res = await GET(new Request("http://x/api/prices"));
     expect(res.headers.get("x-cache")).toBe("HIT");
     expect(fetchPrices).toHaveBeenCalledTimes(1);
   });
@@ -43,7 +43,7 @@ describe("GET /api/prices", () => {
     fetchPrices.mockRejectedValue(
       new UpstreamError("TIMEOUT", "slow", { provider: "coingecko" }),
     );
-    const res = await GET();
+    const res = await GET(new Request("http://x/api/prices"));
     expect(res.status).toBe(504);
     expect((await res.json()).error.code).toBe("TIMEOUT");
   });

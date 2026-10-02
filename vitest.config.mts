@@ -18,6 +18,15 @@ export default defineConfig({
       reporter: ["text", "html", "lcov"],
       include: ["src/lib/**", "src/hooks/**", "src/components/**"],
       exclude: ["src/components/ui/**", "src/**/*.d.ts", "src/**/__fixtures__/**"],
+      // Floors just under the current numbers: CI fails if a change lands
+      // untested code. Page-level wiring (wallet-view, layout) is covered by
+      // the Playwright suite instead, which v8 coverage doesn't see.
+      thresholds: {
+        statements: 78,
+        branches: 73,
+        functions: 68,
+        lines: 78,
+      },
     },
     projects: [
       {
