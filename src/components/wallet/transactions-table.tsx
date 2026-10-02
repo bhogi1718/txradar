@@ -30,7 +30,7 @@ import { EntityTag } from "@/components/common/entity-tag";
 import { Segmented } from "@/components/common/segmented";
 import { counterpartyOf } from "@/lib/analytics/summary";
 import { valueTx, type PricingContext } from "@/lib/analytics/valuation";
-import { truncateAddress } from "@/lib/chains/address";
+import { isValidAddress, truncateAddress } from "@/lib/chains/address";
 import {
   formatAmount,
   formatCount,
@@ -214,10 +214,11 @@ function buildColumns(chain: Chain, pricing: PricingContext) {
         const v = info.getValue();
         const failed = tx.status === "failed";
         const token = !isNative(tx);
+        // TRC-10 ids have no contract to price; otherwise trust the lookup.
         const unverified =
           token &&
-          pricing.tokens !== undefined &&
-          pricing.tokens[tx.asset.contract!] === undefined;
+          (!isValidAddress(tx.chain, tx.asset.contract!) ||
+            (pricing.tokens?.unpriced.includes(tx.asset.contract!) ?? false));
         return (
           <span className="inline-flex items-baseline gap-1.5">
             <span

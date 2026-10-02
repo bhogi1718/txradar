@@ -119,4 +119,61 @@ describe("fetchJson", () => {
       "NETWORK",
     );
   });
+
+  it("backs off after a 429: later calls fail fast without touching the network", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({}, { status: 429, headers: { "retry-after": "20" } }),
+    );
+    await expectUpstream(
+      fetchJson("https://x.test", { provider: "x", schema }),
+      "RATE_LIMITED",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const err = await expectUpstream(
+      fetchJson("https://x.test/other", { provider: "x", schema }),
+      "RATE_LIMITED",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(err.retryAfter).toBeGreaterThan(0);
+    expect(err.retryAfter).toBeLessThanOrEqual(20);
+  });
+
+  it("scopes the back-off to the provider that rate-limited", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, { status: 429 }));
+    await expectUpstream(
+      fetchJson("https://x.test", { provider: "x", schema }),
+      "RATE_LIMITED",
+    );
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await expect(fetchJson("https://y.test", { provider: "y", schema })).resolves.toEqual(
+      {
+        ok: true,
+      },
+    );
+  });
+
+  it("lets calls through again once the cooldown has passed", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({}, { status: 429, headers: { "retry-after": "5" } }),
+      );
+      await expectUpstream(
+        fetchJson("https://x.test", { provider: "x", schema }),
+        "RATE_LIMITED",
+      );
+
+      vi.setSystemTime(Date.now() + 6000);
+      fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+      await expect(
+        fetchJson("https://x.test", { provider: "x", schema }),
+      ).resolves.toEqual({
+        ok: true,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

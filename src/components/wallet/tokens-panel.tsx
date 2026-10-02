@@ -23,7 +23,7 @@ export function TokensPanel({
       <ul className="mt-4 divide-y divide-border/60">
         {tokens.slice(0, 6).map((t) => {
           const net = t.inflow - t.outflow;
-          const unverified = t.price === null;
+          const unverified = t.priceStatus === "unpriced";
           return (
             <li key={t.asset.contract}>
               <button
@@ -69,7 +69,9 @@ export function TokensPanel({
                   <span className="block mono-data text-[11px] text-muted-foreground">
                     {t.price !== null
                       ? formatUsd(net * t.price, { signed: true })
-                      : "no price"}
+                      : t.priceStatus === "unpriced"
+                        ? "no price"
+                        : "price unavailable"}
                   </span>
                 </span>
               </button>
@@ -77,7 +79,7 @@ export function TokensPanel({
           );
         })}
       </ul>
-      {tokens.some((t) => t.price === null) && (
+      {tokens.some((t) => t.priceStatus === "unpriced") && (
         <p className="mt-3 text-[11px] text-muted-foreground">
           Unverified tokens have no market price. On Tron these are usually spam airdrops
           — don&apos;t interact with them.

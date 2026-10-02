@@ -8,12 +8,14 @@ export type {
   PriceMap,
   PriceQuote,
   TokenPriceMap,
+  TokenPricing,
 } from "./coingecko";
 export {
   dailyPricesSchema,
   priceMapSchema,
   priceQuoteSchema,
   tokenPriceMapSchema,
+  tokenPricingSchema,
 } from "./coingecko";
 
 let client: PriceClient | undefined;

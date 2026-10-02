@@ -52,7 +52,7 @@ describe("TokensPanel", () => {
         makeTx({ chain: "tron", asset: USDT, direction: "out", value: 4 }),
         makeTx({ chain: "tron", asset: SPAM, direction: "in", value: 1000 }),
       ],
-      { [USDT.contract]: 1 },
+      { prices: { [USDT.contract]: 1 }, unpriced: [SPAM.contract] },
     );
     render(<TokensPanel tokens={tokens} />);
 
@@ -94,7 +94,10 @@ describe("TransactionsTable enrichment", () => {
             [D1 + DAY, 110],
           ],
           current: 999,
-          tokens: { "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": 1 },
+          tokens: {
+            prices: { "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": 1 },
+            unpriced: [],
+          },
         }}
       />,
     );
@@ -119,7 +122,7 @@ describe("TransactionsTable enrichment", () => {
       <TransactionsTable
         data={[makeTx({ chain: "tron", asset: SPAM, direction: "in", value: 1000 })]}
         chain="tron"
-        pricing={{ tokens: {} }}
+        pricing={{ tokens: { prices: {}, unpriced: [SPAM.contract] } }}
       />,
     );
     expect(screen.getByTitle(/no market price; possibly a spam token/)).toHaveTextContent(
@@ -140,5 +143,28 @@ describe("TransactionsTable enrichment", () => {
       />,
     );
     expect(screen.getAllByRole("row")).toHaveLength(3); // header + 2
+  });
+});
+
+describe("price lookups that fail", () => {
+  it("say 'price unavailable' and never call the token unverified", () => {
+    const tokens = summarizeTokens([
+      makeTx({ chain: "tron", asset: USDT, direction: "in", value: 10 }),
+    ]);
+    render(<TokensPanel tokens={tokens} />);
+    expect(screen.getByText("price unavailable")).toBeInTheDocument();
+    expect(screen.queryByText(/unverified/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/spam airdrops/)).not.toBeInTheDocument();
+  });
+
+  it("don't mark the amount cell as possible spam", () => {
+    render(
+      <TransactionsTable
+        data={[makeTx({ chain: "tron", asset: USDT, direction: "in", value: 10 })]}
+        chain="tron"
+        pricing={{}}
+      />,
+    );
+    expect(screen.queryByTitle(/possibly a spam token/)).not.toBeInTheDocument();
   });
 });

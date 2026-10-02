@@ -39,9 +39,20 @@ export const dailyPricesSchema = z.array(
 );
 export type DailyPrices = z.infer<typeof dailyPricesSchema>;
 
-/** Token contract → USD. Contracts CoinGecko doesn't know are simply absent. */
+/** Token contract → USD. */
 export const tokenPriceMapSchema = z.record(z.string(), z.number().nonnegative());
 export type TokenPriceMap = z.infer<typeof tokenPriceMapSchema>;
+
+/**
+ * What we know about token prices. A contract can be priced, known to have
+ * no market price (`unpriced` — likely spam), or absent from both because the
+ * lookup failed or was skipped. The UI must not call the last case spam.
+ */
+export const tokenPricingSchema = z.object({
+  prices: tokenPriceMapSchema,
+  unpriced: z.array(z.string()),
+});
+export type TokenPricing = z.infer<typeof tokenPricingSchema>;
 
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -62,7 +73,11 @@ export type PriceClient = {
   fetchPrices(chains?: readonly Chain[]): Promise<PriceMap>;
   /** Last 365 days of daily USD closes — the keyless API's history window. */
   fetchDailyHistory(chain: Chain): Promise<DailyPrices>;
-  fetchTokenPrices(chain: Chain, contracts: readonly string[]): Promise<TokenPriceMap>;
+  /**
+   * Current USD price of one token contract, or null when CoinGecko has no
+   * price for it. One contract per call: the keyless API rejects more.
+   */
+  fetchTokenPrice(chain: Chain, contract: string): Promise<number | null>;
 };
 
 export function createCoinGeckoClient(apiKey: string | undefined): PriceClient {
@@ -116,10 +131,9 @@ export function createCoinGeckoClient(apiKey: string | undefined): PriceClient {
       return toDailySeries(data.prices);
     },
 
-    async fetchTokenPrices(chain, contracts) {
-      if (contracts.length === 0) return {};
+    async fetchTokenPrice(chain, contract) {
       const params = new URLSearchParams({
-        contract_addresses: contracts.join(","),
+        contract_addresses: contract,
         vs_currencies: "usd",
       });
       const data = await fetchJson(
@@ -131,13 +145,9 @@ export function createCoinGeckoClient(apiKey: string | undefined): PriceClient {
           revalidate: 0,
         },
       );
-      // CoinGecko echoes EVM contracts lowercased; map back to what we asked for.
-      const out: TokenPriceMap = {};
-      for (const c of contracts) {
-        const hit = data[c] ?? data[c.toLowerCase()];
-        if (hit?.usd !== undefined) out[c] = hit.usd;
-      }
-      return out;
+      // CoinGecko echoes EVM contracts lowercased; an unknown contract returns {}.
+      const hit = data[contract] ?? data[contract.toLowerCase()];
+      return hit?.usd ?? null;
     },
   };
 }

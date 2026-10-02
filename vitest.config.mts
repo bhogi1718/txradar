@@ -26,6 +26,7 @@ export default defineConfig({
         test: {
           name: "lib",
           environment: "node",
+          setupFiles: ["./src/test/setup-lib.ts"],
           include: ["src/lib/**/*.{test,spec}.ts", "src/app/api/**/*.{test,spec}.ts"],
         },
       },

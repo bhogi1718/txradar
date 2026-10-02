@@ -103,24 +103,29 @@ describe("coingecko history and token prices", () => {
     ]);
   });
 
-  it("returns token prices keyed by the contracts asked for", async () => {
+  it("prices one token contract per request", async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({ "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": { usd: 1.0001 } }),
     );
-    const prices = await createCoinGeckoClient(undefined).fetchTokenPrices("ethereum", [
-      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-      "0x0000000000000000000000000000000000000001",
-    ]);
-    expect(new URL(String(fetchMock.mock.calls[0]![0])).pathname).toBe(
-      "/api/v3/simple/token_price/ethereum",
+    const price = await createCoinGeckoClient(undefined).fetchTokenPrice(
+      "ethereum",
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     );
-    expect(prices).toEqual({ "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": 1.0001 });
+    const url = new URL(String(fetchMock.mock.calls[0]![0]));
+    expect(url.pathname).toBe("/api/v3/simple/token_price/ethereum");
+    expect(url.searchParams.get("contract_addresses")).toBe(
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    );
+    expect(price).toBe(1.0001); // matched despite CoinGecko lowercasing the key
   });
 
-  it("skips the request entirely for no contracts", async () => {
+  it("returns null when CoinGecko has no price for the contract", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}));
     await expect(
-      createCoinGeckoClient(undefined).fetchTokenPrices("tron", []),
-    ).resolves.toEqual({});
-    expect(fetchMock).not.toHaveBeenCalled();
+      createCoinGeckoClient(undefined).fetchTokenPrice(
+        "tron",
+        "THxYWbzAgzQgQaYi9G4mjeL1tq1hdrZe55",
+      ),
+    ).resolves.toBeNull();
   });
 });

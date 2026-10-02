@@ -21,15 +21,15 @@ const USDC_CONTRACT = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
 describe("summarizeTokens", () => {
   const txs = [
-    makeTx({ asset: USDT, direction: "in", value: 5, timestamp: 10 }),
-    makeTx({ asset: USDT, direction: "out", value: 2, timestamp: 30 }),
-    makeTx({ asset: USDT, direction: "out", value: 9, status: "failed" }),
-    makeTx({ asset: SPAM, direction: "in", value: 1000, timestamp: 20 }),
+    makeTx({ chain: "tron", asset: USDT, direction: "in", value: 5, timestamp: 10 }),
+    makeTx({ chain: "tron", asset: USDT, direction: "out", value: 2, timestamp: 30 }),
+    makeTx({ chain: "tron", asset: USDT, direction: "out", value: 9, status: "failed" }),
+    makeTx({ chain: "tron", asset: SPAM, direction: "in", value: 1000, timestamp: 20 }),
     makeTx({ value: 1 }), // native: ignored
   ];
 
   it("groups per contract, busiest first, skipping failed", () => {
-    const s = summarizeTokens(txs, { [USDT.contract]: 1 });
+    const s = summarizeTokens(txs, { prices: { [USDT.contract]: 1 }, unpriced: [] });
     expect(s.map((t) => t.asset.symbol)).toEqual(["USDT", "ha138 com"]);
     expect(s[0]).toMatchObject({
       inflow: 5,
@@ -40,18 +40,27 @@ describe("summarizeTokens", () => {
     });
   });
 
-  it("flags tokens without a price", () => {
-    expect(summarizeTokens(txs)[1]!.price).toBeNull();
+  it("distinguishes 'no market price' from 'price unknown'", () => {
+    const known = summarizeTokens(txs, {
+      prices: { [USDT.contract]: 1 },
+      unpriced: [SPAM.contract],
+    });
+    expect(known.map((t) => t.priceStatus)).toEqual(["priced", "unpriced"]);
+
+    const failed = summarizeTokens(txs); // lookup failed or still loading
+    expect(failed.map((t) => t.priceStatus)).toEqual(["unavailable", "unavailable"]);
+    expect(failed[1]!.price).toBeNull();
   });
 
-  it("lists distinct priceable contracts, skipping TRC-10 ids", () => {
+  it("lists priceable contracts most-used first, skipping TRC-10 ids", () => {
     const withTrc10 = [...txs, makeTx({ chain: "tron", asset: TRC10, value: 5 })].map(
       (t) => ({
         ...t,
         chain: "tron" as const,
       }),
     );
-    expect(tokenContracts(withTrc10)).toEqual([USDT.contract, SPAM.contract].sort());
+    // Most-used first: USDT (3 txs) before the spam token (1).
+    expect(tokenContracts(withTrc10)).toEqual([USDT.contract, SPAM.contract]);
   });
 });
 
@@ -93,5 +102,13 @@ describe("summarizeExposure", () => {
       exchangeShare: 0,
       labeledCount: 0,
     });
+  });
+});
+
+describe("TRC-10 tokens", () => {
+  it("are always unpriced: there is no contract to look up", () => {
+    const TRC10 = { symbol: "TRC-10 #1005193", contract: "trc10:1005193", decimals: 0 };
+    const [t] = summarizeTokens([makeTx({ chain: "tron", asset: TRC10, value: 5 })]);
+    expect(t!.priceStatus).toBe("unpriced");
   });
 });

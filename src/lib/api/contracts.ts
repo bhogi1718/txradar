@@ -4,7 +4,7 @@ import { isValidAddress, normalizeAddress } from "@/lib/chains/address";
 import {
   dailyPricesSchema,
   priceMapSchema,
-  tokenPriceMapSchema,
+  tokenPricingSchema,
 } from "@/lib/prices/coingecko";
 import { chainSchema } from "@/lib/schemas/chain";
 import { transactionListSchema } from "@/lib/schemas/transaction";
@@ -81,7 +81,8 @@ export type PriceHistoryResponse = z.infer<typeof priceHistoryResponseSchema>;
 
 // --- GET /api/token-prices?chain=&contracts=a,b ---------------------------
 
-export const TOKEN_PRICES_MAX_CONTRACTS = 30;
+/** One upstream call per contract on the keyless tier, so keep this small. */
+export const TOKEN_PRICES_MAX_CONTRACTS = 10;
 
 export const tokenPricesQuerySchema = z
   .object({
@@ -113,14 +114,14 @@ export const tokenPricesQuerySchema = z
   })
   .transform((q) => ({
     ...q,
-    contracts: q.contracts.map((c) => normalizeAddress(q.chain, c)).sort(),
+    // Order is preserved: callers list the most-used tokens first.
+    contracts: q.contracts.map((c) => normalizeAddress(q.chain, c)),
   }));
 
 export const tokenPricesResponseSchema = z.object({
   chain: chainSchema,
-  prices: tokenPriceMapSchema,
+  pricing: tokenPricingSchema,
   fetchedAt: z.string(),
-  cached: z.boolean(),
 });
 
 export type TokenPricesResponse = z.infer<typeof tokenPricesResponseSchema>;

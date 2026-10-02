@@ -57,11 +57,13 @@ describe("valueTx", () => {
 
   it("prices tokens by contract at the current price", () => {
     const tx = makeTx({ asset: USDT, value: 10 });
-    expect(valueTx(tx, { tokens: { [USDT.contract]: 1 } })).toEqual({
+    expect(
+      valueTx(tx, { tokens: { prices: { [USDT.contract]: 1 }, unpriced: [] } }),
+    ).toEqual({
       usd: 10,
       basis: "current",
     });
-    expect(valueTx(tx, { tokens: {} })).toBeNull();
+    expect(valueTx(tx, { tokens: { prices: {}, unpriced: [] } })).toBeNull();
   });
 
   it("values failed txs at zero", () => {
