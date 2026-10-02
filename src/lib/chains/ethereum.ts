@@ -12,6 +12,7 @@ import {
 import { sameAddress } from "./address";
 import { UpstreamError } from "./errors";
 import { fetchJson } from "./http";
+import { mergeTokenTransfers } from "./merge";
 import { fromBaseUnits } from "./units";
 
 const PROVIDER = "etherscan";
@@ -43,17 +44,135 @@ const etherscanTxSchema = z.object({
   methodId: z.string(),
 });
 
+type EtherscanTx = z.infer<typeof etherscanTxSchema>;
+
+/** action=tokentx — one row per ERC-20 Transfer event involving the wallet. */
+const tokenTxSchema = z.object({
+  blockNumber: z.string(),
+  timeStamp: z.string(),
+  hash: z.string(),
+  from: z.string(),
+  to: z.string(),
+  value: z.string().regex(/^\d+$/),
+  contractAddress: z.string(),
+  tokenName: z.string(),
+  tokenSymbol: z.string(),
+  tokenDecimal: z.string(),
+});
+type EtherscanTokenTx = z.infer<typeof tokenTxSchema>;
+
+/** action=txlistinternal — native ETH moved by contracts inside a transaction. */
+const internalTxSchema = z.object({
+  blockNumber: z.string(),
+  timeStamp: z.string(),
+  hash: z.string(),
+  from: z.string(),
+  to: z.string(),
+  value: z.string().regex(/^\d+$/),
+  contractAddress: z.string(),
+  type: z.string(),
+  isError: z.string(),
+});
+type EtherscanInternalTx = z.infer<typeof internalTxSchema>;
+
 /**
  * Etherscan overloads `result`: an array on success, a string message on
  * "no transactions" or on errors (rate limit, bad key). Model both.
  */
-const etherscanResponseSchema = z.object({
-  status: z.enum(["0", "1"]),
-  message: z.string(),
-  result: z.union([z.array(etherscanTxSchema), z.string()]),
-});
+function listResponse<T extends z.ZodTypeAny>(row: T) {
+  return z.object({
+    status: z.enum(["0", "1"]),
+    message: z.string(),
+    result: z.union([z.array(row), z.string()]),
+  });
+}
 
-type EtherscanTx = z.infer<typeof etherscanTxSchema>;
+// --- Token & internal transfers -------------------------------------------
+
+const MAX_SYMBOL_LENGTH = 32;
+
+const HTML_ENTITIES: Record<string, string> = {
+  "&lt;": "<",
+  "&gt;": ">",
+  "&amp;": "&",
+  "&quot;": '"',
+  "&#39;": "'",
+};
+
+/** Etherscan returns token names HTML-escaped ("&lt;3"); show the real text. */
+export function decodeEntities(s: string): string {
+  return s.replace(/&(lt|gt|amp|quot|#39);/g, (m) => HTML_ENTITIES[m] ?? m);
+}
+
+/** Spam tokens use long, emoji-laden names; keep symbols readable. */
+function tokenSymbol(t: EtherscanTokenTx): string {
+  const raw = decodeEntities(
+    t.tokenSymbol.trim() || t.tokenName.trim() || "TOKEN",
+  ).replace(/\s+/g, " ");
+  return raw.length > MAX_SYMBOL_LENGTH ? `${raw.slice(0, MAX_SYMBOL_LENGTH - 1)}…` : raw;
+}
+
+/**
+ * An ERC-20 transfer as a token transaction. Its fee is unknown here: when
+ * the wallet sent it, `mergeTokenTransfers` takes the fee from the matching
+ * value-0 contract call in the normal list.
+ */
+export function normalizeTokenTx(t: EtherscanTokenTx, wallet: string): Transaction {
+  const parsed = Number(t.tokenDecimal);
+  const decimals = Number.isInteger(parsed) && parsed >= 0 && parsed <= 77 ? parsed : 0;
+  const isOut = sameAddress("ethereum", t.from, wallet);
+  const isIn = sameAddress("ethereum", t.to, wallet);
+  return {
+    chain: "ethereum",
+    hash: t.hash,
+    timestamp: Number(t.timeStamp) * 1000,
+    blockHeight: Number(t.blockNumber),
+    from: t.from.toLowerCase(),
+    to: t.to.toLowerCase() || null,
+    asset: {
+      symbol: tokenSymbol(t),
+      contract: t.contractAddress.toLowerCase(),
+      decimals,
+    },
+    value: fromBaseUnits(t.value, decimals),
+    fee: null,
+    direction: isOut && isIn ? "self" : isOut ? "out" : "in",
+    status: "success", // Transfer events are only emitted by successful calls
+    category: "token-transfer",
+    isContract: false,
+    method: "transfer",
+  };
+}
+
+/**
+ * ETH moved by a contract inside a transaction — an exchange's withdrawal
+ * contract paying out, a DEX returning ETH, a refund. Without these, ETH
+ * the wallet received from contracts is missing from its history. The fee
+ * belongs to whoever sent the outer transaction, so it's never attributed
+ * here.
+ */
+export function normalizeInternalTx(t: EtherscanInternalTx, wallet: string): Transaction {
+  const to = t.to || t.contractAddress || null;
+  const isOut = sameAddress("ethereum", t.from, wallet);
+  const isIn = sameAddress("ethereum", to, wallet);
+  const failed = t.isError === "1";
+  return {
+    chain: "ethereum",
+    hash: t.hash,
+    timestamp: Number(t.timeStamp) * 1000,
+    blockHeight: Number(t.blockNumber),
+    from: t.from.toLowerCase(),
+    to: to ? to.toLowerCase() : null,
+    asset: nativeAsset("ethereum"),
+    value: failed ? 0 : fromBaseUnits(t.value, CHAIN_META.ethereum.decimals),
+    fee: null,
+    direction: isOut && isIn ? "self" : isOut ? "out" : "in",
+    status: failed ? "failed" : "success",
+    category: "internal-transfer",
+    isContract: true,
+    method: null,
+  };
+}
 
 // --- Account type -----------------------------------------------------------
 
@@ -177,13 +296,86 @@ export function addressesNeedingCodeCheck(
 
 // --- Adapter --------------------------------------------------------------
 
-/** Cursor = 1-based page number. Anything else starts from the newest page. */
-function parsePageCursor(cursor: string | undefined): number {
-  const n = Number(cursor);
-  return Number.isInteger(n) && n >= 1 ? n : 1;
+/**
+ * Each of the three lists pages independently (1-based page numbers);
+ * null means that list is exhausted. Unknown or malformed cursors start
+ * over from the newest page.
+ */
+type EthCursor = {
+  normal: number | null;
+  tokens: number | null;
+  internal: number | null;
+};
+
+const pageSchema = z.number().int().min(1).nullable();
+const ethCursorSchema = z.object({
+  normal: pageSchema,
+  tokens: pageSchema,
+  internal: pageSchema,
+});
+const FIRST_PAGE: EthCursor = { normal: 1, tokens: 1, internal: 1 };
+
+export function decodeEthCursor(cursor: string | undefined): EthCursor {
+  if (!cursor) return FIRST_PAGE;
+  try {
+    const parsed = ethCursorSchema.safeParse(JSON.parse(cursor));
+    return parsed.success ? parsed.data : FIRST_PAGE;
+  } catch {
+    return FIRST_PAGE;
+  }
+}
+
+export function encodeEthCursor(c: EthCursor): string | null {
+  return c.normal || c.tokens || c.internal ? JSON.stringify(c) : null;
 }
 
 export function createEthereumAdapter(apiKey: string | undefined): ChainAdapter {
+  /** Fetch one page of one Etherscan account list. "No transactions" → []. */
+  async function fetchList<T extends z.ZodTypeAny>(
+    action: "txlist" | "tokentx" | "txlistinternal",
+    row: T,
+    address: string,
+    page: number,
+    limit: number,
+    revalidate: number | false | undefined,
+  ): Promise<z.infer<T>[]> {
+    const params = new URLSearchParams({
+      chainid: String(CHAIN_ID),
+      module: "account",
+      action,
+      address,
+      startblock: "0",
+      endblock: "latest",
+      page: String(page),
+      offset: String(limit),
+      sort: "desc",
+      apikey: apiKey!,
+    });
+    const data = await fetchJson(`${BASE_URL}?${params}`, {
+      provider: PROVIDER,
+      schema: listResponse(row),
+      revalidate,
+    });
+
+    if (typeof data.result !== "string") return data.result;
+    // status "0" + "No transactions found" is a legitimate empty result.
+    if (
+      /no transactions found/i.test(data.message) ||
+      /no transactions found/i.test(data.result)
+    ) {
+      return [];
+    }
+    if (/rate limit/i.test(data.result)) {
+      throw new UpstreamError("RATE_LIMITED", data.result, {
+        provider: PROVIDER,
+        retryAfter: 5,
+      });
+    }
+    throw new UpstreamError("UPSTREAM_ERROR", `${data.message}: ${data.result}`, {
+      provider: PROVIDER,
+    });
+  }
+
   return {
     chain: "ethereum",
 
@@ -195,56 +387,58 @@ export function createEthereumAdapter(apiKey: string | undefined): ChainAdapter 
       }
 
       const limit = Math.min(options.limit ?? DEFAULT_LIMIT, MAX_WINDOW);
-      const page = parsePageCursor(options.cursor);
-      const params = new URLSearchParams({
-        chainid: String(CHAIN_ID),
-        module: "account",
-        action: "txlist",
-        address,
-        startblock: "0",
-        endblock: "latest",
-        page: String(page),
-        offset: String(limit),
-        sort: "desc",
-        apikey: apiKey,
-      });
+      const cursor = decodeEthCursor(options.cursor);
+      const get = <T extends z.ZodTypeAny>(
+        action: "txlist" | "tokentx" | "txlistinternal",
+        row: T,
+        page: number | null,
+      ) =>
+        page === null
+          ? Promise.resolve(null)
+          : fetchList(action, row, address, page, limit, options.revalidate);
 
-      const data = await fetchJson(`${BASE_URL}?${params}`, {
-        provider: PROVIDER,
-        schema: etherscanResponseSchema,
-        revalidate: options.revalidate,
-      });
-
-      if (typeof data.result === "string") {
-        // status "0" + "No transactions found" is a legitimate empty result.
-        if (
-          /no transactions found/i.test(data.message) ||
-          /no transactions found/i.test(data.result)
-        ) {
-          return { transactions: [], nextCursor: null };
-        }
-        if (/rate limit/i.test(data.result)) {
-          throw new UpstreamError("RATE_LIMITED", data.result, {
-            provider: PROVIDER,
-            retryAfter: 5,
-          });
-        }
-        throw new UpstreamError("UPSTREAM_ERROR", `${data.message}: ${data.result}`, {
-          provider: PROVIDER,
-        });
-      }
+      // Normal history is the core: its failure fails the page. Tokens and
+      // internal transfers are enrichment: on failure their cursor stays
+      // put, so "Load older" retries them instead of silently skipping.
+      const [normal, tokens, internal] = await Promise.all([
+        get("txlist", etherscanTxSchema, cursor.normal),
+        get("tokentx", tokenTxSchema, cursor.tokens).catch(() => undefined),
+        get("txlistinternal", internalTxSchema, cursor.internal).catch(() => undefined),
+      ]);
 
       const kinds = await resolveCodeKinds(
-        addressesNeedingCodeCheck(data.result, address),
+        addressesNeedingCodeCheck(normal ?? [], address),
         apiKey,
       );
-      const txs = data.result.map((tx) => normalizeEtherscanTx(tx, address, kinds));
-      // A full page means there may be more, as long as the next page is
-      // still inside Etherscan's 10k-row window.
-      const more = data.result.length === limit && (page + 1) * limit <= MAX_WINDOW;
+
+      const nativeTxs = (normal ?? []).map((tx) =>
+        normalizeEtherscanTx(tx, address, kinds),
+      );
+      const internalTxs = (internal ?? [])
+        // Zero-value internal calls are plumbing, not money movement.
+        .filter((t) => t.value !== "0" || t.isError === "1")
+        .map((t) => normalizeInternalTx(t, address));
+      const tokenTxs = (tokens ?? []).map((t) => normalizeTokenTx(t, address));
+
+      /** Next page for one list: null when exhausted or past the 10k window. */
+      const advance = (page: number | null, rows: unknown[] | null | undefined) => {
+        if (page === null) return null;
+        if (rows === undefined) return page; // failed: retry this page next time
+        const full = rows !== null && rows.length === limit;
+        return full && (page + 1) * limit <= MAX_WINDOW ? page + 1 : null;
+      };
+
       return {
-        transactions: sortNewestFirst(transactionListSchema.parse(txs)),
-        nextCursor: more ? String(page + 1) : null,
+        transactions: sortNewestFirst(
+          transactionListSchema.parse(
+            mergeTokenTransfers([...nativeTxs, ...internalTxs], tokenTxs),
+          ),
+        ),
+        nextCursor: encodeEthCursor({
+          normal: advance(cursor.normal, normal),
+          tokens: advance(cursor.tokens, tokens),
+          internal: advance(cursor.internal, internal),
+        }),
       };
     },
   };

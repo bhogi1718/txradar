@@ -6,7 +6,12 @@ import type { DailyPrices } from "@/lib/prices";
 
 const fetchDailyHistory = vi.fn<() => Promise<DailyPrices>>();
 const fetchTokenPrice =
-  vi.fn<(chain: string, contract: string) => Promise<number | null>>();
+  vi.fn<
+    (
+      chain: string,
+      contract: string,
+    ) => Promise<{ usd: number; marketCap: number | null } | null>
+  >();
 
 vi.mock("@/lib/prices", () => ({
   getPriceClient: () => ({ fetchDailyHistory, fetchTokenPrice }),
@@ -61,7 +66,9 @@ describe("GET /api/token-prices", () => {
   });
 
   it("looks contracts up one by one and separates priced from unpriced", async () => {
-    fetchTokenPrice.mockImplementation(async (_chain, c) => (c === USDT ? 1 : null));
+    fetchTokenPrice.mockImplementation(async (_chain, c) =>
+      c === USDT ? { usd: 1, marketCap: 1e11 } : null,
+    );
     const res = await tokens.GET(req(`${USDT},${SPAM}`));
 
     expect(fetchTokenPrice.mock.calls).toEqual([
@@ -71,11 +78,14 @@ describe("GET /api/token-prices", () => {
     expect((await res.json()).data.pricing).toEqual({
       prices: { [USDT]: 1 },
       unpriced: [SPAM],
+      marketCaps: { [USDT]: 1e11 },
     });
   });
 
   it("caches each contract's answer, including 'no price'", async () => {
-    fetchTokenPrice.mockImplementation(async (_chain, c) => (c === USDT ? 1 : null));
+    fetchTokenPrice.mockImplementation(async (_chain, c) =>
+      c === USDT ? { usd: 1, marketCap: 1e11 } : null,
+    );
     await tokens.GET(req(`${USDT},${SPAM}`));
     await tokens.GET(req(`${SPAM},${USDT}`));
     expect(fetchTokenPrice).toHaveBeenCalledTimes(2);
@@ -85,10 +95,14 @@ describe("GET /api/token-prices", () => {
     fetchTokenPrice.mockImplementation(async (_chain, c) => {
       if (c === SPAM)
         throw new UpstreamError("TIMEOUT", "slow", { provider: "coingecko" });
-      return 1;
+      return { usd: 1, marketCap: null };
     });
     const body = await (await tokens.GET(req(`${USDT},${SPAM}`))).json();
-    expect(body.data.pricing).toEqual({ prices: { [USDT]: 1 }, unpriced: [] });
+    expect(body.data.pricing).toEqual({
+      prices: { [USDT]: 1 },
+      unpriced: [],
+      marketCaps: {},
+    });
   });
 
   it("stops at a rate limit and reports it when nothing is known", async () => {

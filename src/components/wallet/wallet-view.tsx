@@ -15,6 +15,7 @@ import {
   applyFilters,
   DEFAULT_FILTERS,
   filterByRange,
+  isUnlisted,
   rangeStart,
   type DirectionFilter,
   type RangePreset,
@@ -86,9 +87,15 @@ export function WalletView({
   const now = useMinuteClock();
   const [searchDraft, setSearchDraft] = useState(filters.q);
 
-  const all = query.transactions;
+  const fetched = query.transactions;
+  // Airdropped spam tokens are hidden from every view unless asked for.
+  const unlistedCount = useMemo(() => fetched.filter(isUnlisted).length, [fetched]);
+  const all = useMemo(
+    () => (filters.showUnlisted ? fetched : fetched.filter((t) => !isUnlisted(t))),
+    [fetched, filters.showUnlisted],
+  );
   const history = usePriceHistory(chain);
-  const contracts = useMemo(() => tokenContracts(all), [all]);
+  const contracts = useMemo(() => tokenContracts(fetched), [fetched]);
   const tokenPrices = useTokenPrices(chain, contracts);
 
   const current = prices.data?.prices[chain]?.usd;
@@ -172,7 +179,7 @@ export function WalletView({
   }, [inWindow]);
 
   async function loadOlder() {
-    const before = all.length;
+    const before = fetched.length;
     const res = await query.fetchNextPage();
     if (res.isError) {
       toast.error("Couldn't load older transactions", {
@@ -294,6 +301,23 @@ export function WalletView({
           />
           Hide failed
         </label>
+        {unlistedCount > 0 && (
+          <label
+            className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 text-xs text-muted-foreground select-none hover:text-foreground"
+            title="Tokens not on CoinGecko's token list — almost always airdropped spam"
+          >
+            <input
+              type="checkbox"
+              checked={!filters.showUnlisted}
+              onChange={(e) => setFilters({ showUnlisted: !e.target.checked })}
+              className="size-3.5 accent-[var(--primary)]"
+            />
+            Hide unlisted tokens
+            <span className="mono-data text-[11px] text-muted-foreground/70">
+              {formatCount(unlistedCount)}
+            </span>
+          </label>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <div className="relative w-full lg:w-72">
@@ -339,11 +363,11 @@ export function WalletView({
           <Info className="size-3.5" />
           {query.hasNextPage ? (
             <>
-              Latest {formatCount(all.length)} transactions
+              Latest {formatCount(fetched.length)} transactions
               {loadOlderButton}
             </>
           ) : (
-            <>Full history · {formatCount(all.length)} transactions</>
+            <>Full history · {formatCount(fetched.length)} transactions</>
           )}
         </div>
       </div>

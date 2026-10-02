@@ -14,7 +14,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 1 : 0,
-  workers: CI ? 2 : undefined,
+  // More workers than this overloads typical dev machines (and OneDrive-synced folders).
+  workers: 2,
   reporter: CI ? [["github"], ["html", { open: "never" }]] : "list",
   timeout: 30_000,
   expect: { timeout: 10_000 },

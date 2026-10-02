@@ -31,7 +31,10 @@ const marketChartResponse = z.object({
   prices: z.array(z.tuple([z.number(), z.number()])),
 });
 
-const tokenPriceResponse = z.record(z.string(), z.object({ usd: z.number().optional() }));
+const tokenPriceResponse = z.record(
+  z.string(),
+  z.object({ usd: z.number().optional(), usd_market_cap: z.number().optional() }),
+);
 
 /** One point per UTC day: [dayStartMs, usd]. Sorted ascending. */
 export const dailyPricesSchema = z.array(
@@ -51,8 +54,12 @@ export type TokenPriceMap = z.infer<typeof tokenPriceMapSchema>;
 export const tokenPricingSchema = z.object({
   prices: tokenPriceMapSchema,
   unpriced: z.array(z.string()),
+  /** Market cap by contract, when CoinGecko reports one (used for liquidity checks). */
+  marketCaps: z.record(z.string(), z.number().nonnegative()).optional(),
 });
 export type TokenPricing = z.infer<typeof tokenPricingSchema>;
+
+export type TokenQuote = { usd: number; marketCap: number | null };
 
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -77,7 +84,7 @@ export type PriceClient = {
    * Current USD price of one token contract, or null when CoinGecko has no
    * price for it. One contract per call: the keyless API rejects more.
    */
-  fetchTokenPrice(chain: Chain, contract: string): Promise<number | null>;
+  fetchTokenPrice(chain: Chain, contract: string): Promise<TokenQuote | null>;
 };
 
 export function createCoinGeckoClient(apiKey: string | undefined): PriceClient {
@@ -135,6 +142,7 @@ export function createCoinGeckoClient(apiKey: string | undefined): PriceClient {
       const params = new URLSearchParams({
         contract_addresses: contract,
         vs_currencies: "usd",
+        include_market_cap: "true",
       });
       const data = await fetchJson(
         `${BASE_URL}/simple/token_price/${CHAIN_META[chain].coingeckoPlatform}?${params}`,
@@ -147,7 +155,9 @@ export function createCoinGeckoClient(apiKey: string | undefined): PriceClient {
       );
       // CoinGecko echoes EVM contracts lowercased; an unknown contract returns {}.
       const hit = data[contract] ?? data[contract.toLowerCase()];
-      return hit?.usd ?? null;
+      if (hit?.usd === undefined) return null;
+      // CoinGecko reports 0 when it doesn't know the cap; treat that as unknown.
+      return { usd: hit.usd, marketCap: hit.usd_market_cap || null };
     },
   };
 }

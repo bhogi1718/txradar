@@ -38,6 +38,11 @@ export const filterParamsSchema = z.object({
     .enum(["1", "0"])
     .catch("0")
     .transform((v) => v === "1"),
+  /** Unlisted (likely spam) tokens are hidden unless ?unlisted=show. */
+  showUnlisted: z
+    .enum(["show", "hide"])
+    .catch("hide")
+    .transform((v) => v === "show"),
   /**
    * Counterparty drill-down path, outermost first (wallet → A → B). Capped
    * at TRAIL_MAX hops; addresses are validated against the chain where used.
@@ -64,6 +69,7 @@ export function parseFilterParams(params: URLSearchParams): TxFilters {
     range: params.get("range") ?? undefined,
     q: params.get("q") ?? undefined,
     hideFailed: params.get("hideFailed") ?? undefined,
+    showUnlisted: params.get("unlisted") ?? undefined,
     trail: params.get("trail") ?? undefined,
   });
 }
@@ -75,12 +81,18 @@ export function serializeFilters(filters: TxFilters): URLSearchParams {
   if (filters.range !== "all") p.set("range", filters.range);
   if (filters.q) p.set("q", filters.q);
   if (filters.hideFailed) p.set("hideFailed", "1");
+  if (filters.showUnlisted) p.set("unlisted", "show");
   if (filters.trail.length > 0) p.set("trail", filters.trail.join(","));
   return p;
 }
 
 export function rangeStart(range: RangePreset, now: number = Date.now()): number | null {
   return range === "all" ? null : now - PRESET_MS[range];
+}
+
+/** Token transfers whose contract is known not to be on the token list. */
+export function isUnlisted(tx: Transaction): boolean {
+  return tx.asset.listed === false;
 }
 
 /** Apply the time window only — used for summary + chart. */

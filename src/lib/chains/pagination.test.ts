@@ -4,7 +4,7 @@ import { makeTx } from "@/test/factories";
 import etherscanFixture from "./__fixtures__/etherscan-txlist.json";
 import tronFixture from "./__fixtures__/trongrid-account-txs.json";
 import { createBitcoinAdapter, DEFAULT_ESPLORA_BASE_URL } from "./bitcoin";
-import { createEthereumAdapter } from "./ethereum";
+import { createEthereumAdapter, decodeEthCursor, encodeEthCursor } from "./ethereum";
 import { combinePages } from "./pages";
 import { createTronAdapter, decodeTronCursor, encodeTronCursor } from "./tron";
 
@@ -24,45 +24,77 @@ const urlOf = (i: number) => new URL(String(fetchMock.mock.calls[i]![0]));
 describe("ethereum pagination", () => {
   const ETH_WALLET = "0xd8da6bf26964af9d7eed9e03e53415d37aa96045";
   const n = etherscanFixture.result.length;
+  const EMPTY = { status: "0", message: "No transactions found", result: [] };
+
+  /** Route each Etherscan action to its own fresh response. */
+  function route(bodies: Partial<Record<string, unknown>> = {}) {
+    return async (input: RequestInfo | URL) => {
+      const action = new URL(String(input)).searchParams.get("action")!;
+      if (action === "eth_getCode") return json({ result: "0x" });
+      return json(bodies[action] ?? (action === "txlist" ? etherscanFixture : EMPTY));
+    };
+  }
+
+  const pageOf = (action: string) =>
+    fetchMock.mock.calls
+      .map(([u]) => new URL(String(u)).searchParams)
+      .find((p) => p.get("action") === action)
+      ?.get("page");
 
   beforeEach(() => {
-    fetchMock.mockImplementation(async (input) =>
-      new URL(String(input)).searchParams.get("action") === "eth_getCode"
-        ? json({ result: "0x" })
-        : json(etherscanFixture),
-    );
+    fetchMock.mockImplementation(route());
   });
 
-  it("offers the next page when the page came back full", async () => {
+  it("offers the next page of a list that came back full", async () => {
     const page = await createEthereumAdapter("K").fetchTransactions(ETH_WALLET, {
       limit: n,
     });
-    expect(urlOf(0).searchParams.get("page")).toBe("1");
-    expect(page.nextCursor).toBe("2");
+    expect(pageOf("txlist")).toBe("1");
+    expect(decodeEthCursor(page.nextCursor!)).toEqual({
+      normal: 2,
+      tokens: null,
+      internal: null,
+    });
   });
 
-  it("requests the cursor's page and stops on a short page", async () => {
+  it("requests each list's own page and skips exhausted lists", async () => {
     const page = await createEthereumAdapter("K").fetchTransactions(ETH_WALLET, {
       limit: n + 5,
-      cursor: "3",
+      cursor: encodeEthCursor({ normal: 3, tokens: null, internal: 2 })!,
     });
-    expect(urlOf(0).searchParams.get("page")).toBe("3");
+    expect(pageOf("txlist")).toBe("3");
+    expect(pageOf("txlistinternal")).toBe("2");
+    expect(pageOf("tokentx")).toBeUndefined();
     expect(page.nextCursor).toBeNull();
   });
 
   it("stops at Etherscan's 10,000-row window", async () => {
-    // offset n, page p: next page would end at (p+1)·n rows
     const lastPage = Math.floor(10_000 / n);
     const page = await createEthereumAdapter("K").fetchTransactions(ETH_WALLET, {
       limit: n,
-      cursor: String(lastPage),
+      cursor: encodeEthCursor({ normal: lastPage, tokens: null, internal: null })!,
     });
     expect(page.nextCursor).toBeNull();
   });
 
-  it("treats a garbage cursor as the newest page", async () => {
+  it("keeps a failed enrichment list on the same page so it is retried", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const action = new URL(String(input)).searchParams.get("action")!;
+      if (action === "tokentx") return new Response("oops", { status: 500 });
+      return route()(input);
+    });
+    const page = await createEthereumAdapter("K").fetchTransactions(ETH_WALLET, {
+      limit: n,
+    });
+    expect(page.transactions).toHaveLength(n); // normal history still renders
+    expect(decodeEthCursor(page.nextCursor!).tokens).toBe(1);
+  });
+
+  it("treats a garbage cursor as the newest page of every list", async () => {
     await createEthereumAdapter("K").fetchTransactions(ETH_WALLET, { cursor: "abc" });
-    expect(urlOf(0).searchParams.get("page")).toBe("1");
+    expect(pageOf("txlist")).toBe("1");
+    expect(pageOf("tokentx")).toBe("1");
+    expect(pageOf("txlistinternal")).toBe("1");
   });
 });
 

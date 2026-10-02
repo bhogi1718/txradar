@@ -163,7 +163,7 @@ describe("ethereum adapter", () => {
 
   it("treats 'No transactions found' as an empty list", async () => {
     fetchMock.mockReset();
-    fetchMock.mockResolvedValue(
+    fetchMock.mockImplementation(async () =>
       jsonResponse({ status: "0", message: "No transactions found", result: [] }),
     );
     await expect(createEthereumAdapter("KEY").fetchTransactions(WALLET)).resolves.toEqual(

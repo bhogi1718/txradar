@@ -16,7 +16,14 @@ describe("filter params", () => {
   it("parses valid params", () => {
     expect(
       parseFilterParams(new URLSearchParams("dir=out&range=30d&q=0xabc&hideFailed=1")),
-    ).toEqual({ dir: "out", range: "30d", q: "0xabc", hideFailed: true, trail: [] });
+    ).toEqual({
+      dir: "out",
+      range: "30d",
+      q: "0xabc",
+      hideFailed: true,
+      showUnlisted: false,
+      trail: [],
+    });
   });
 
   it("falls back to defaults for garbage instead of throwing", () => {
@@ -32,6 +39,7 @@ describe("filter params", () => {
       range: "7d",
       q: "abc",
       hideFailed: true,
+      showUnlisted: true,
       trail: ["0xa", "0xb"],
     };
     expect(parseFilterParams(serializeFilters(f))).toEqual(f);

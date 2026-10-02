@@ -158,10 +158,10 @@ test.describe("wallet page", () => {
   }) => {
     await mockApi(page);
     await page.goto(`/ethereum/${ETH_WALLET}`);
-    await expect(page.getByText("Latest 5 transactions")).toBeVisible();
+    await expect(page.getByText("Latest 6 transactions")).toBeVisible();
 
     await page.getByRole("button", { name: "Load older" }).first().click();
-    await expect(page.getByText("Full history · 6 transactions")).toBeVisible();
+    await expect(page.getByText("Full history · 7 transactions")).toBeVisible();
     await expect(page.getByRole("button", { name: "Load older" })).toHaveCount(0);
   });
 
@@ -181,5 +181,19 @@ test.describe("wallet page", () => {
       "asked us to slow down",
     );
     await expect(page.getByRole("button", { name: /Retry in \ds/ })).toBeDisabled();
+  });
+
+  test("hides unlisted (spam) tokens by default and reveals them on request", async ({
+    page,
+  }) => {
+    await mockApi(page);
+    await page.goto(`/ethereum/${ETH_WALLET}`);
+    const toggle = page.getByRole("checkbox", { name: /Hide unlisted tokens/ });
+    await expect(toggle).toBeChecked();
+    await expect(page.getByText("FREE-AIRDROP")).toHaveCount(0);
+
+    await toggle.uncheck();
+    await expect(page).toHaveURL(/unlisted=show/);
+    await expect(page.getByText("FREE-AIRDROP").first()).toBeVisible();
   });
 });

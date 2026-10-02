@@ -19,13 +19,17 @@ export type TxStatus = z.infer<typeof txStatusSchema>;
  *  - transfer:          native coin moved between accounts
  *  - contract-call:     interaction with a smart contract (may carry value)
  *  - contract-creation: deployed a contract
- *  - token-transfer:    non-native asset moved (TRC-10, ERC-20 etc.)
+ *  - token-transfer:    non-native asset moved (TRC-10, TRC-20, ERC-20)
+ *  - internal-transfer: native coin moved *by a contract* inside a
+ *                       transaction (e.g. an exchange withdrawal contract
+ *                       paying out ETH, or a refund)
  */
 export const txCategorySchema = z.enum([
   "transfer",
   "contract-call",
   "contract-creation",
   "token-transfer",
+  "internal-transfer",
 ]);
 export type TxCategory = z.infer<typeof txCategorySchema>;
 
@@ -37,6 +41,12 @@ export const assetSchema = z.object({
   symbol: z.string().min(1),
   contract: z.string().min(1).nullable(),
   decimals: z.number().int().nonnegative(),
+  /**
+   * Token contracts only: true when the token is on CoinGecko's token list
+   * (recognized, not endorsed), false when it isn't — usually airdropped
+   * spam. Unset for native coins or when the list couldn't be loaded.
+   */
+  listed: z.boolean().optional(),
 });
 export type Asset = z.infer<typeof assetSchema>;
 

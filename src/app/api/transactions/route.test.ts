@@ -8,6 +8,14 @@ import type { Transaction } from "@/lib/schemas/transaction";
 const fetchTransactions =
   vi.fn<(address: string, opts?: unknown) => Promise<TransactionPage>>();
 
+const loadTokenList = vi.fn<() => Promise<Set<string> | null>>();
+
+// Never touch the network from unit tests; annotation itself is tested below.
+vi.mock("@/lib/tokens/token-list", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/tokens/token-list")>()),
+  loadTokenList: () => loadTokenList(),
+}));
+
 vi.mock("@/lib/chains", () => ({
   getAdapter: vi.fn(() => ({ chain: "ethereum", fetchTransactions })),
 }));
@@ -39,6 +47,8 @@ function req(qs: string) {
 
 describe("GET /api/transactions", () => {
   beforeEach(() => {
+    loadTokenList.mockReset();
+    loadTokenList.mockResolvedValue(null);
     fetchTransactions.mockReset();
     sharedCache("transactions").clear();
   });
@@ -139,5 +149,37 @@ describe("GET /api/transactions", () => {
     const again = await GET(req(`chain=ethereum&address=${ETH}`));
     expect(again.headers.get("x-cache")).toBe("HIT");
     expect(fetchTransactions).toHaveBeenCalledTimes(2);
+  });
+
+  it("tags token transfers as listed or not, and leaves native rows alone", async () => {
+    const usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+    const spam = "0x00000000000000000000000000000000000000ff";
+    loadTokenList.mockResolvedValue(new Set([usdc]));
+    fetchTransactions.mockResolvedValue({
+      transactions: [
+        sample,
+        {
+          ...sample,
+          hash: "0xt1",
+          asset: { symbol: "USDC", contract: usdc, decimals: 6 },
+        },
+        {
+          ...sample,
+          hash: "0xt2",
+          asset: { symbol: "SCAM", contract: spam, decimals: 18 },
+        },
+      ],
+      nextCursor: null,
+    });
+    const body = await (await GET(req(`chain=ethereum&address=${ETH}`))).json();
+    const listed = body.data.transactions.map((t: Transaction) => t.asset.listed);
+    expect(listed).toEqual([undefined, true, false]);
+  });
+
+  it("still serves transactions when the token list can't be loaded", async () => {
+    loadTokenList.mockRejectedValue(new Error("list down"));
+    fetchTransactions.mockResolvedValue({ transactions: [sample], nextCursor: null });
+    const res = await GET(req(`chain=ethereum&address=${ETH}`));
+    expect(res.status).toBe(200);
   });
 });
