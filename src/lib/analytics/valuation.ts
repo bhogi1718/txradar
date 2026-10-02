@@ -1,4 +1,4 @@
-import type { DailyPrices, TokenPriceMap } from "@/lib/prices/coingecko";
+import type { DailyPrices, TokenPricing } from "@/lib/prices/coingecko";
 import { isNative, type Transaction } from "@/lib/schemas/transaction";
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -34,8 +34,11 @@ export type PricingContext = {
   history?: DailyPrices;
   /** Current native-coin price; the fallback when history doesn't cover a date. */
   current?: number;
-  /** Current token prices by contract. Tokens have no history here. */
-  tokens?: TokenPriceMap;
+  /**
+   * Current token prices. Undefined while loading or after a failed lookup —
+   * which is different from a token being known to have no price.
+   */
+  tokens?: TokenPricing;
 };
 
 /** USD value of `amount` of the tx's asset, or null when it can't be priced honestly. */
@@ -50,7 +53,7 @@ export function valueAmount(
     if (ctx.current !== undefined) return { usd: amount * ctx.current, basis: "current" };
     return null;
   }
-  const p = ctx.tokens?.[tx.asset.contract!];
+  const p = ctx.tokens?.prices[tx.asset.contract!];
   return p === undefined ? null : { usd: amount * p, basis: "current" };
 }
 

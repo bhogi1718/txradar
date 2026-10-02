@@ -16,6 +16,7 @@ import {
   rangeStart,
   type DirectionFilter,
   type RangePreset,
+  type TxFilters,
 } from "@/lib/analytics/filters";
 import { summarizeExposure } from "@/lib/analytics/entities";
 import { summarize } from "@/lib/analytics/summary";
@@ -57,11 +58,19 @@ function useMinuteClock() {
   return now;
 }
 
-export function WalletView({ chain, address }: { chain: Chain; address: string }) {
+export function WalletView({
+  chain,
+  address,
+  initialFilters,
+}: {
+  chain: Chain;
+  address: string;
+  initialFilters: TxFilters;
+}) {
   const meta = CHAIN_META[chain];
   const query = useTransactions(chain, address);
   const prices = usePrices();
-  const [filters, setFilters] = useFilterParams();
+  const [filters, setFilters] = useFilterParams(initialFilters);
   const { add: addRecent } = useRecentSearches();
   const now = useMinuteClock();
   const [searchDraft, setSearchDraft] = useState(filters.q);
@@ -76,14 +85,9 @@ export function WalletView({ chain, address }: { chain: Chain; address: string }
     () => ({
       history: history.data?.prices,
       current,
-      // undefined (still loading / failed) vs {} (loaded, none priced) matters:
-      // only the latter marks tokens as unverified.
-      tokens:
-        contracts.length === 0 || tokenPrices.isSuccess
-          ? (tokenPrices.data?.prices ?? {})
-          : undefined,
+      tokens: tokenPrices.data?.pricing,
     }),
-    [history.data, current, contracts.length, tokenPrices.isSuccess, tokenPrices.data],
+    [history.data, current, tokenPrices.data],
   );
 
   useEffect(() => {
@@ -272,7 +276,11 @@ export function WalletView({ chain, address }: { chain: Chain; address: string }
 
       <FlowChart txs={inWindow} symbol={meta.symbol} range={chartRange} />
 
-      <div className={tokens.length > 0 ? "grid gap-6 lg:grid-cols-2" : "grid gap-6"}>
+      <div
+        className={
+          tokens.length > 0 ? "grid items-start gap-6 lg:grid-cols-2" : "grid gap-6"
+        }
+      >
         <EntitiesPanel exposure={exposure} symbol={meta.symbol} onSelect={focusSearch} />
         {tokens.length > 0 && <TokensPanel tokens={tokens} onSelect={focusSearch} />}
       </div>

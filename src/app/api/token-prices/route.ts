@@ -3,30 +3,57 @@ import type { NextRequest } from "next/server";
 import { tokenPricesQuerySchema, type TokenPricesResponse } from "@/lib/api/contracts";
 import { handleError, ok, parseQuery } from "@/lib/api/response";
 import { sharedCache } from "@/lib/cache";
-import { getPriceClient, type TokenPriceMap } from "@/lib/prices";
+import { isUpstreamError } from "@/lib/chains/errors";
+import { getPriceClient, type TokenPricing } from "@/lib/prices";
 
 const TTL_MS = 5 * 60 * 1000;
 
-type CachedResult = { prices: TokenPriceMap; fetchedAt: string };
+/** Per-contract answers: a price, or null for "CoinGecko has no price". */
+const cache = sharedCache<number | null>("token-prices", { maxEntries: 1000 });
 
-const cache = sharedCache<CachedResult>("token-prices", { maxEntries: 200 });
-
+/**
+ * The keyless CoinGecko tier prices one contract per request, so contracts
+ * are looked up one at a time and cached individually. Lookups are best
+ * effort: a contract that errors is simply left out (the UI shows "price
+ * unavailable"), and a rate limit stops the loop instead of making it worse.
+ */
 export async function GET(request: NextRequest) {
   const query = parseQuery(request.nextUrl.searchParams, tokenPricesQuerySchema);
   if (!query.ok) return query.response;
   const { chain, contracts } = query.value;
 
+  const pricing: TokenPricing = { prices: {}, unpriced: [] };
+  let firstError: unknown = null;
+
   try {
-    const { value, hit } = await cache.getOrLoad(
-      `${chain}:${contracts.join(",")}`,
-      TTL_MS,
-      async () => ({
-        prices: await getPriceClient().fetchTokenPrices(chain, contracts),
-        fetchedAt: new Date().toISOString(),
-      }),
-    );
-    const body: TokenPricesResponse = { chain, ...value, cached: hit };
-    return ok(body, { maxAge: 60, headers: { "x-cache": hit ? "HIT" : "MISS" } });
+    for (const contract of contracts) {
+      try {
+        const { value } = await cache.getOrLoad(`${chain}:${contract}`, TTL_MS, () =>
+          getPriceClient().fetchTokenPrice(chain, contract),
+        );
+        if (value === null) pricing.unpriced.push(contract);
+        else pricing.prices[contract] = value;
+      } catch (err) {
+        firstError ??= err;
+        if (isUpstreamError(err) && err.code === "RATE_LIMITED") break;
+      }
+    }
+
+    // Nothing known at all: surface the error so the client can back off.
+    if (
+      firstError &&
+      Object.keys(pricing.prices).length === 0 &&
+      pricing.unpriced.length === 0
+    ) {
+      return handleError(firstError);
+    }
+
+    const body: TokenPricesResponse = {
+      chain,
+      pricing,
+      fetchedAt: new Date().toISOString(),
+    };
+    return ok(body, { maxAge: 60 });
   } catch (err) {
     return handleError(err);
   }

@@ -1,14 +1,15 @@
 import { NextRequest } from "next/server";
 
 import { sharedCache } from "@/lib/cache";
-import type { DailyPrices, TokenPriceMap } from "@/lib/prices";
+import { UpstreamError } from "@/lib/chains/errors";
+import type { DailyPrices } from "@/lib/prices";
 
 const fetchDailyHistory = vi.fn<() => Promise<DailyPrices>>();
-const fetchTokenPrices =
-  vi.fn<(chain: string, contracts: string[]) => Promise<TokenPriceMap>>();
+const fetchTokenPrice =
+  vi.fn<(chain: string, contract: string) => Promise<number | null>>();
 
 vi.mock("@/lib/prices", () => ({
-  getPriceClient: () => ({ fetchDailyHistory, fetchTokenPrices }),
+  getPriceClient: () => ({ fetchDailyHistory, fetchTokenPrice }),
 }));
 
 const history = await import("./price-history/route");
@@ -44,32 +45,58 @@ describe("GET /api/price-history", () => {
 });
 
 describe("GET /api/token-prices", () => {
+  const SPAM = "THxYWbzAgzQgQaYi9G4mjeL1tq1hdrZe55";
+  const req = (contracts: string) =>
+    new NextRequest(`http://x/api/token-prices?chain=tron&contracts=${contracts}`);
+
   beforeEach(() => {
-    fetchTokenPrices.mockReset();
+    fetchTokenPrice.mockReset();
     sharedCache("token-prices").clear();
   });
 
   it("rejects invalid contracts for the chain", async () => {
-    const res = await tokens.GET(
-      new NextRequest(`http://x/api/token-prices?chain=tron&contracts=${USDT},0xnope`),
-    );
+    const res = await tokens.GET(req(`${USDT},0xnope`));
     expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error.issues[0].path).toBe("contracts.1");
+    expect((await res.json()).error.issues[0].path).toBe("contracts.1");
   });
 
-  it("dedupes and sorts contracts so equivalent requests share a cache entry", async () => {
-    fetchTokenPrices.mockResolvedValue({ [USDT]: 1 });
-    await tokens.GET(
-      new NextRequest(`http://x/api/token-prices?chain=tron&contracts=${USDT},${USDT}`),
-    );
-    const res = await tokens.GET(
-      new NextRequest(`http://x/api/token-prices?chain=tron&contracts=${USDT}`),
-    );
+  it("looks contracts up one by one and separates priced from unpriced", async () => {
+    fetchTokenPrice.mockImplementation(async (_chain, c) => (c === USDT ? 1 : null));
+    const res = await tokens.GET(req(`${USDT},${SPAM}`));
 
-    expect(fetchTokenPrices).toHaveBeenCalledTimes(1);
-    expect(fetchTokenPrices).toHaveBeenCalledWith("tron", [USDT]);
-    expect(res.headers.get("x-cache")).toBe("HIT");
-    expect((await res.json()).data.prices).toEqual({ [USDT]: 1 });
+    expect(fetchTokenPrice.mock.calls).toEqual([
+      ["tron", USDT],
+      ["tron", SPAM],
+    ]);
+    expect((await res.json()).data.pricing).toEqual({
+      prices: { [USDT]: 1 },
+      unpriced: [SPAM],
+    });
+  });
+
+  it("caches each contract's answer, including 'no price'", async () => {
+    fetchTokenPrice.mockImplementation(async (_chain, c) => (c === USDT ? 1 : null));
+    await tokens.GET(req(`${USDT},${SPAM}`));
+    await tokens.GET(req(`${SPAM},${USDT}`));
+    expect(fetchTokenPrice).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves a failed contract out instead of calling it unpriced", async () => {
+    fetchTokenPrice.mockImplementation(async (_chain, c) => {
+      if (c === SPAM)
+        throw new UpstreamError("TIMEOUT", "slow", { provider: "coingecko" });
+      return 1;
+    });
+    const body = await (await tokens.GET(req(`${USDT},${SPAM}`))).json();
+    expect(body.data.pricing).toEqual({ prices: { [USDT]: 1 }, unpriced: [] });
+  });
+
+  it("stops at a rate limit and reports it when nothing is known", async () => {
+    fetchTokenPrice.mockRejectedValue(
+      new UpstreamError("RATE_LIMITED", "slow", { provider: "coingecko", retryAfter: 9 }),
+    );
+    const res = await tokens.GET(req(`${USDT},${SPAM}`));
+    expect(res.status).toBe(429);
+    expect(fetchTokenPrice).toHaveBeenCalledTimes(1);
   });
 });

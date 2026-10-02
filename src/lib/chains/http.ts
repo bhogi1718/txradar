@@ -17,6 +17,17 @@ export type FetchJsonOptions<T> = {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+/**
+ * Per-provider back-off after a 429. Until the provider's Retry-After has
+ * passed, calls fail fast locally instead of hitting it again — retrying a
+ * rate-limited API only extends the penalty.
+ */
+const cooldownUntil = new Map<string, number>();
+
+export function resetCooldowns(): void {
+  cooldownUntil.clear();
+}
+
 function parseRetryAfter(value: string | null): number | undefined {
   if (!value) return undefined;
   const seconds = Number(value);
@@ -40,6 +51,15 @@ export async function fetchJson<T>(
     timeoutMs = DEFAULT_TIMEOUT_MS,
     revalidate,
   } = options;
+
+  const until = cooldownUntil.get(provider) ?? 0;
+  if (until > Date.now()) {
+    throw new UpstreamError("RATE_LIMITED", `${provider} rate limit reached`, {
+      provider,
+      status: 429,
+      retryAfter: Math.ceil((until - Date.now()) / 1000),
+    });
+  }
 
   let response: Response;
   try {
@@ -70,10 +90,12 @@ export async function fetchJson<T>(
   }
 
   if (response.status === 429) {
+    const retryAfter = parseRetryAfter(response.headers.get("retry-after")) ?? 30;
+    cooldownUntil.set(provider, Date.now() + retryAfter * 1000);
     throw new UpstreamError("RATE_LIMITED", `${provider} rate limit reached`, {
       provider,
       status: 429,
-      retryAfter: parseRetryAfter(response.headers.get("retry-after")) ?? 30,
+      retryAfter,
     });
   }
 
