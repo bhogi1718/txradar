@@ -9,8 +9,6 @@
 Paste any wallet address and get its inflows, outflows, tokens, counterparties and exchange
 exposure on one radar-style dashboard. No signup, no paid services.
 
-[![CI](https://github.com/bhogi1718/txradar/actions/workflows/ci.yml/badge.svg)](https://github.com/bhogi1718/txradar/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-teal.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/bhogi1718/txradar?color=0d9488)](https://github.com/bhogi1718/txradar/releases)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React 19](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
@@ -245,16 +243,15 @@ flowchart LR
 
 ## ✅ Quality
 
-| Gate                 | Result                                                                    |
-| -------------------- | ------------------------------------------------------------------------- |
-| **Unit/integration** | 316 tests (Vitest); adapters run against recorded explorer responses      |
-| **End-to-end**       | 29 tests (Playwright) on the production build, desktop and phone          |
-| **Coverage**         | Enforced in CI: ≥78% lines, ≥73% branches, ≥68% functions                 |
-| **Accessibility**    | axe WCAG 2.1 A/AA scans of every page, in both themes                     |
-| **Lighthouse**       | Performance **99** / Accessibility **100** / Best Practices **100**       |
-| **Security**         | Strict nonce CSP, hardening headers, zero CSP violations (tested)         |
-| **Types**            | TypeScript `strict` + `noUncheckedIndexedAccess`; Zod at every boundary   |
-| **CI/CD**            | Lint · typecheck · format → tests → build → e2e on every push; Dependabot |
+| Gate                 | Result                                                                  |
+| -------------------- | ----------------------------------------------------------------------- |
+| **Unit/integration** | 316 tests (Vitest); adapters run against recorded explorer responses    |
+| **End-to-end**       | 29 tests (Playwright) on the production build, desktop and phone        |
+| **Coverage**         | Enforced on every push: ≥78% lines, ≥73% branches, ≥68% functions       |
+| **Accessibility**    | axe WCAG 2.1 A/AA scans of every page, in both themes                   |
+| **Lighthouse**       | Performance **99** / Accessibility **100** / Best Practices **100**     |
+| **Security**         | Strict nonce CSP, hardening headers, zero CSP violations (tested)       |
+| **Types**            | TypeScript `strict` + `noUncheckedIndexedAccess`; Zod at every boundary |
 
 <details>
 <summary><b>Security details</b></summary>
@@ -364,7 +361,7 @@ scripts/                # Screenshot generator
 - [x] ERC-20, TRC-20, TRC-10 and Ethereum internal transactions
 - [x] Counterparty inspector with multi-hop drill-down
 - [x] Spam and liquidity detection, CSV export, light and dark themes
-- [x] CI quality gates: coverage, accessibility, security, e2e
+- [x] Automated quality gates: coverage, accessibility, security, e2e
 - [ ] More EVM chains (Etherscan V2 already supports them with the same key)
 - [ ] Faster wallet page on low-end phones (move analytics into a Web Worker)
 - [ ] A larger set of verified entity labels
@@ -395,10 +392,6 @@ advice, and labels and prices come from third-party sources that can be incomple
 Data from [Etherscan](https://etherscan.io), [Blockstream Esplora](https://blockstream.info),
 [TronGrid](https://www.trongrid.io) and [CoinGecko](https://www.coingecko.com). UI built on
 [shadcn/ui](https://ui.shadcn.com) and [Base UI](https://base-ui.com).
-
-## 📄 License
-
-[MIT](LICENSE) © 2026 Charan Tej
 
 <div align="center">
 <sub>Built by <a href="https://github.com/bhogi1718">Charan Tej</a> with Next.js, TypeScript
