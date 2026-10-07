@@ -32,8 +32,8 @@ You need Node.js 22.12 or newer. For end-to-end tests, also run
    npm run build && npm run e2e  # production build + end-to-end
    ```
 
-5. Open a pull request and fill in the template. CI runs the same checks, plus a coverage
-   gate.
+5. Open a pull request and fill in the template. The same checks run automatically, plus a
+   coverage gate.
 
 A pre-commit hook formats and lints staged files automatically.
 
